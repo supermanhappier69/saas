@@ -11,6 +11,9 @@ const clip = (v, n) => String(v ?? '').trim().slice(0, n);
 const trialDays = (def) => def.trialDays ?? 14;
 const priceText = (p) => (typeof p.price === 'number' ? (p.price ? `£${p.price}` : 'Free') : p.price || '');
 const withStatus = (page, status) => (status === 200 ? page : { status, html: page });
+/** True when every paid plan is a one-off payment rather than a monthly subscription. */
+export const oneOffOnly = (def) => (def.plans || []).filter((p) => p.price).length > 0 && (def.plans || []).filter((p) => p.price).every((p) => p.oneOff);
+export const perText = (p) => (p.oneOff ? ' one-off' : ' / month');
 
 /** Only allow redirects back into the app after logging in. */
 export const safeNext = (v) => (typeof v === 'string' && /^\/app(\/|\?|$)/.test(v) && !/[\s\\]/.test(v) ? v : '/app');
@@ -25,7 +28,7 @@ export function pricingGrid(def) {
   const plans = (def.plans || []).filter((p) => !p.hidden);
   const cta = def.marketing?.cta || 'Start free trial';
   const card = (p) => html`<div class="${p.featured ? 'plan plan-featured' : 'plan'}">${p.featured ? html`<p class="plan-flag">Most popular</p>` : ''}<h3>${p.name}</h3><p class="plan-price"><span class="amount">${priceText(p)}</span>${
-    typeof p.price === 'number' && p.price ? html`<span class="per"> / month</span>` : ''
+    typeof p.price === 'number' && p.price ? html`<span class="per">${perText(p)}</span>` : ''
   }</p>${p.description ? html`<p class="muted">${p.description}</p>` : ''}${
     p.features?.length ? html`<ul class="ticks">${p.features.map((f) => html`<li>${f}</li>`)}</ul>` : ''
   }<div class="plan-action">${button(cta, { href: '/signup', variant: p.featured ? 'primary' : 'secondary' })}</div></div>`;
@@ -80,9 +83,13 @@ These terms cover your use of ${def.name} ("the service"), provided by ${company
 
 ## Free trial and paid plans
 - New workspaces get a ${trialDays(def)}-day free trial. We don't take payment during the trial.
-- Paid plans are billed monthly in advance through our payment provider, Stripe. Prices exclude VAT, which is added where it applies.
+${oneOffOnly(def)
+    ? `- Paid plans are a one-off payment through our payment provider, Stripe, for continued access to the plan you buy, including updates within that version. Prices exclude VAT, which is added where it applies.
+- Refunds: [refund policy to be decided before launch]. Nothing in these terms affects your rights under consumer law where they apply.
+- We may change prices for new purchases at any time. A price change never affects a plan you have already paid for.`
+    : `- Paid plans are billed monthly in advance through our payment provider, Stripe. Prices exclude VAT, which is added where it applies.
 - You can cancel any time from the Billing page. Your plan stays active until the end of the period you have paid for. We don't refund part months unless the law requires it.
-- We may change prices with at least 30 days' notice by email. The new price applies from your next billing date after the notice ends.
+- We may change prices with at least 30 days' notice by email. The new price applies from your next billing date after the notice ends.`}
 
 ## Your data
 - You own the information you put into the service ("your data"). We only use it to provide and support the service, as described in our Privacy Policy.
@@ -283,7 +290,7 @@ export function registerPages(router) {
   router.get('/', (ctx) => (ctx.definition.home ? ctx.definition.home(ctx) : landingPage(ctx)));
   router.get('/pricing', (ctx) => {
     const def = ctx.definition;
-    const intro = def.marketing?.pricingIntro || 'Simple monthly plans. Start with a free trial and choose a plan when you are ready.';
+    const intro = def.marketing?.pricingIntro || (oneOffOnly(def) ? 'One payment, no subscription. Start with a free trial and choose a plan when you are ready.' : 'Simple monthly plans. Start with a free trial and choose a plan when you are ready.');
     return publicPage(def, ctx, { title: 'Pricing', body: html`<section class="section"><div class="container"><h1>Pricing</h1><p class="lead">${intro}</p>${pricingGrid(def)}</div></section>${faqSection(def)}` });
   });
   router.get('/terms', (ctx) => legalPage(ctx, 'terms'));

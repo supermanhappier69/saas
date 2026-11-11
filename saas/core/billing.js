@@ -64,8 +64,7 @@ export function createBilling({ db, config, definition }) {
     if (!plan || !plan.price) throw new HttpError(400, 'Choose a paid plan.');
     const price = priceId(plan);
     if (!price) throw new HttpError(503, `Online payments for this plan are not set up yet (missing STRIPE_PRICE_${plan.id.toUpperCase()}).`);
-    const session = await stripe('checkout/sessions', {
-      mode: 'subscription',
+    const common = {
       line_items: [{ price, quantity: 1 }],
       success_url: `${config.BASE_URL}/app/billing?checkout=success`,
       cancel_url: `${config.BASE_URL}/app/billing?checkout=cancelled`,
@@ -74,8 +73,11 @@ export function createBilling({ db, config, definition }) {
       customer_email: org.stripe_customer ? undefined : user.email,
       allow_promotion_codes: 'true',
       metadata: { org_id: String(org.id), plan: plan.id },
-      subscription_data: { metadata: { org_id: String(org.id), plan: plan.id } },
-    });
+    };
+    // One-off plans are a single payment: no subscription, and Stripe issues an invoice as the receipt.
+    const session = plan.oneOff
+      ? await stripe('checkout/sessions', { mode: 'payment', ...common, customer_creation: org.stripe_customer ? undefined : 'always', invoice_creation: { enabled: 'true' }, payment_intent_data: { metadata: { org_id: String(org.id), plan: plan.id } } })
+      : await stripe('checkout/sessions', { mode: 'subscription', ...common, subscription_data: { metadata: { org_id: String(org.id), plan: plan.id } } });
     return session.url;
   }
 

@@ -1,0 +1,5 @@
+# App data (SQLite databases, uploads, dev secrets)
+data/
+saas/data/
+node_modules/
+.DS_Store

@@ -39,6 +39,9 @@ function planAction(ctx, p) {
   const org = ctx.org;
   if (org.plan_status === 'active' && org.plan === p.id) return badge('Current plan', 'green');
   if (org.is_demo) return html`<p class="muted small">Plans can't be changed in the demo.</p>`;
+  const paidFor = org.plan_status === 'active' ? billing.planById(org.plan) : null;
+  // A one-off purchase is never "downgraded" by buying a cheaper plan.
+  if (p.oneOff && paidFor?.oneOff && (paidFor.price || 0) >= (p.price || 0)) return badge('Included', 'gray');
   if (!can(ctx, 'owner')) return html`<p class="muted small">Only the workspace owner can change plans.</p>`;
   if (!p.price) return '';
   if (billing.enabled && billing.priceId(p)) return postButton(ctx, '/app/billing/checkout', `Choose ${p.name}`, { variant: 'primary', fields: { plan: p.id } });
@@ -66,7 +69,7 @@ function billingPage(ctx) {
   const plans = billing.plans.filter((p) => !p.hidden).map((p) => {
     const isCurrent = org.plan_status === 'active' && org.plan === p.id;
     return html`<div class="${isCurrent ? 'plan plan-current' : 'plan'}"><h3>${p.name}</h3><p class="plan-price"><span class="amount">${priceText(p)}</span>${
-      typeof p.price === 'number' && p.price ? html`<span class="per"> / month</span>` : ''
+      typeof p.price === 'number' && p.price ? html`<span class="per">${p.oneOff ? ' one-off' : ' / month'}</span>` : ''
     }</p>${p.description ? html`<p class="muted">${p.description}</p>` : ''}${
       p.features?.length ? html`<ul class="ticks">${p.features.map((f) => html`<li>${f}</li>`)}</ul>` : ''
     }<div class="plan-action">${planAction(ctx, p)}</div></div>`;

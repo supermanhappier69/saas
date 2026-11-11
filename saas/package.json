@@ -6,7 +6,7 @@
   "description": "Three working SaaS products on one shared, dependency-free Node.js core.",
   "engines": { "node": ">=22.13" },
   "scripts": {
-    "test": "node --no-warnings --test test/ products/*/test/",
+    "test": "node --no-warnings --test \"test/*.test.js\" \"products/*/test/*.test.js\"",
     "latepay": "node --no-warnings products/latepay/server.js",
     "landlord": "node --no-warnings products/landlord/server.js",
     "sops": "node --no-warnings products/sops/server.js"
