@@ -1,0 +1,14 @@
+{
+  "name": "opus-saas",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Three working SaaS products on one shared, dependency-free Node.js core.",
+  "engines": { "node": ">=22.13" },
+  "scripts": {
+    "test": "node --no-warnings --test test/ products/*/test/",
+    "latepay": "node --no-warnings products/latepay/server.js",
+    "landlord": "node --no-warnings products/landlord/server.js",
+    "sops": "node --no-warnings products/sops/server.js"
+  }
+}

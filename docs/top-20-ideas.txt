@@ -1,0 +1,227 @@
+TOP 20 IDEAS READY TO LAUNCH
+============================
+Opus Holdings - Research & Commercial Intelligence
+Ranked by OVERALL SCORE (out of 100) from the Market Opportunities database.
+Rebuilt 11 November 2026 from the recovered Sprint 1 record.
+
+HOW TO READ THIS
+- Score = pain (20) + demand evidence (20) + willingness to pay (15) +
+  differentiation (10) + build feasibility (10) + reaching buyers (10) +
+  recurring revenue (10) + scalability (5).
+- Prices are hypotheses. Competitor prices were checked in Sprint 1 and
+  have not been re-checked since.
+- IN BUILD = being built as a working SaaS app in this project bundle.
+
+------------------------------------------------------------------------------
+#1  UK LATE PAYMENT & CREDIT CONTROL KIT
+    Score 76/100 - Digital Product - IN BUILD as a working SaaS app
+    Who it's for: UK B2B small businesses (1–50 staff) that invoice other businesses
+    Problem:      Late payment strains cash flow; many owners lack a consistent chasing process and don't use their statutory rights to interest and compensation.
+    Solution:     Notion kit: invoice register with days-overdue, statutory interest and compensation formulas; customer credit register; staged chase calendar; email and letter templates; payment-terms policy; weekly credit-control routine.
+    Price idea:   £49 Core / £99 Complete one-time (hypothesis)
+    Competitors:
+      - Chaser: From £199/month under £4m turnover; £599+ above (third-party guides).
+      - Paidnice: From £45/month (vendor's own pricing article).
+      - InvoiceHelm: Free statutory debt calculator and letter-before-action template; paid plans not captured.
+      - (rest of this list was cut off in the recovered record)
+------------------------------------------------------------------------------
+#2  UK LANDLORD COMPLIANCE & PORTFOLIO OS
+    Score 74/100 - Digital Product - IN BUILD as a working SaaS app
+    Who it's for: UK self-managing landlords with 1–15 properties
+    Problem:      Landlords must track Gas Safety (12-month), EICR (5-year) and EPC (10-year) certificates, licences, deposits and new Renters' Rights Act duties across properties; most still use spreadsheets.
+    Solution:     Owned Notion OS: property register, certificate tracker with next-due and status formulas, tenancies, maintenance log, documents index, income and expense log for MTD record-keeping, annual compliance calendar.
+    Price idea:   £49 Solo / £89 Portfolio one-time; £149 done-with-you setup (hypothesis)
+    Competitors:
+      - LetCompliance: From £7.99/month.
+      - Landlord Compliance (http://landlordcompliance.io): Free for 10 properties including email reminders.
+      - ComplyGuard: Founding offer £19/month for up to 10 properties; 14-day trial.
+      - (rest of this list was cut off in the recovered record)
+------------------------------------------------------------------------------
+#3  SOP LIBRARY SYSTEM + DONE-FOR-YOU SOP WRITING
+    Score 72/100 - Digital Product - IN BUILD as a working SaaS app
+    Who it's for: UK and US SMEs with 5–50 staff
+    Problem:      Processes live in founders' heads; onboarding and delegation stall; SOP software is expensive or quote-only for small teams.
+    Solution:     Master SOP library in Notion with owner, review date, version and training sign-off, plus a done-for-you service writing the first 10 SOPs.
+    Price idea:   £79 system; £750–£1,500 for 10 written SOPs (hypothesis)
+    Competitors:
+      - Trainual: Quote via demo; third-party review reports a $1,000 implementation fee.
+      - Growtoria: Editable SOP template sold (price not captured).
+      - Helpable: Not captured this sprint.
+------------------------------------------------------------------------------
+#4  UK LATE PAYMENT AUTOMATION APP
+    Score 71/100 - Software Product
+    Who it's for: UK B2B small businesses
+    Problem:      Owners want chasing sequences and statutory interest to run automatically.
+    Solution:     SaaS connecting to accounting software with chase sequences and statutory interest.
+    Price idea:   £19–£49/month (hypothesis)
+    Competitors:
+      - Chaser: From £199/month under £4m turnover; £599+ above (third-party guides).
+      - Paidnice: From £45/month (vendor's own pricing article).
+      - Badger (Business Debt Recovery): Not captured this sprint.
+------------------------------------------------------------------------------
+#5  FRACTIONAL CREDIT CONTROLLER SERVICE
+    Score 70/100 - Service
+    Who it's for: UK SMEs with £500k–£5m turnover
+    Problem:      Nobody owns credit control, so debtor days creep up.
+    Solution:     Monthly managed credit control using the Late Payment Kit.
+    Price idea:   £300–£800/month (hypothesis)
+    Competitors:
+      - Chaser: From £199/month under £4m turnover; £599+ above (third-party guides).
+      - Paidnice: From £45/month (vendor's own pricing article).
+------------------------------------------------------------------------------
+#6  MTD FOR INCOME TAX READINESS KIT
+    Score 67/100 - Digital Product
+    Who it's for: UK sole traders and landlords with qualifying income above the current threshold, and those approaching lower future thresholds
+    Problem:      People are unsure whether MTD applies, what quarterly updates involve and which software to choose.
+    Solution:     Readiness kit: eligibility checker, record-keeping setup, quarterly calendar, software comparison and checklist.
+    Price idea:   £29–£49 one-time; £99 with group workshop (hypothesis)
+    Competitors:
+      - FreeAgent: Sole trader plan £19/month ex VAT; free with NatWest, RBS or Ulster business accounts.
+      - ThisQuarter: Sole traders start free; practices pay per client on 12-month terms; £100 per final declaration.
+------------------------------------------------------------------------------
+#7  COI TRACKING SAAS WITH EXPIRY ALERTS & SUBCONTRACTOR PORTAL
+    Score 65/100 - Software Product
+    Who it's for: Contractors with 20–200 subcontractors
+    Problem:      Same COI problem; buyers want automatic reminders and certificate uploads.
+    Solution:     SaaS with expiry alerts, upload portal and audit log.
+    Price idea:   $49–$149/month (hypothesis)
+    Competitors:
+      - TrackMyVendor: Free for 25 contractors; flat paid plans up to $59/month; no per-seat fees.
+      - bcs: From $0.95 per vendor per month.
+      - myCOI: No published price list (demo form only).
+      - Subcada: Free compliance tools plus paid plans (pricing not captured).
+------------------------------------------------------------------------------
+#8  SUBCONTRACTOR COI & COMPLIANCE TRACKER (NOTION)
+    Score 65/100 - Digital Product
+    Who it's for: General and specialty contractors managing 10–100 subcontractors
+    Problem:      Subcontractor insurance certificates expire and are tracked in spreadsheets; one lapse can be very costly.
+    Solution:     Notion tracker: subcontractors, policies, limits, expiry formulas, request log and job-site eligibility view.
+    Price idea:   $79–$149 one-time + $299 setup (hypothesis)
+    Competitors:
+      - TrackMyVendor: Free for 25 contractors; flat paid plans up to $59/month; no per-seat fees.
+      - bcs: From $0.95 per vendor per month.
+      - myCOI: No published price list (demo form only).
+      - Subcada: Free compliance tools plus paid plans (pricing not captured).
+------------------------------------------------------------------------------
+#9  FREELANCER CLIENT ONBOARDING & SCOPE CONTROL OS
+    Score 65/100 - Digital Product
+    Who it's for: Freelancers and micro-studios (designers, developers, marketers)
+    Problem:      Scope creep and unpaid extra work; all-in-one tools have raised prices.
+    Solution:     Notion OS: lead-to-client pipeline, onboarding checklist, scope register, change-request log with approvals, invoice tracker.
+    Price idea:   £49–£79 (hypothesis)
+    Competitors:
+      - HoneyBook: Starter raised from $19 to $36/month and Essentials to $59/month (Feb 2025); card-on-file surcharge cited.
+      - Dubsado: Starter $20/month.
+      - Bonsai: Basic $9 per user/month.
+------------------------------------------------------------------------------
+#10  RENTERS' RIGHTS ACT 2025 TRANSITION PACK
+    Score 64/100 - Digital Product
+    Who it's for: UK private landlords with existing tenancies
+    Problem:      Landlords must adapt paperwork and processes to the Renters' Rights Act, including giving tenants the government information sheet.
+    Solution:     Plain-English action pack: checklist per tenancy, evidence log, letter templates and dated tracker.
+    Price idea:   £19–£39 one-time (hypothesis)
+    Competitors:
+      - Comprent: Start free (paid tiers not captured).
+      - Landlord HQ: Not captured this sprint.
+------------------------------------------------------------------------------
+#11  AGENCY CLIENT OPS & PROFITABILITY OS
+    Score 64/100 - Digital Product
+    Who it's for: Marketing agencies with 3–25 staff
+    Problem:      Monthly client reporting is manual, scope creeps and owners can't see which clients are profitable.
+    Solution:     Notion OS: clients, retainers, scope register, hours vs fee, profitability formula, reporting calendar, onboarding checklist.
+    Price idea:   £99–£199 one-time + £499 setup (hypothesis)
+    Competitors:
+      - AgencyAnalytics: $20 per client per month on the core plan.
+      - ManyRequests: Plans published on pricing page (not captured this sprint); free profitability calculator offered.
+------------------------------------------------------------------------------
+#12  UK COMPANY COMPLIANCE DEADLINE CALENDAR
+    Score 64/100 - Digital Product
+    Who it's for: UK limited-company directors with 1–10 staff and no in-house finance function
+    Problem:      Statutory deadlines (annual accounts, confirmation statement, VAT, PAYE, insurance and licence renewals) sit in different places and depend on one person remembering them; misses trigger automatic penalties.
+    Solution:     Pre-built UK compliance calendar with an owner and backup per obligation, next-due formulas, evidence log and annual review routine.
+    Price idea:   £29–£49 one-time; optional £9/month update service (hypothesis)
+    Competitors:
+      - No priced direct competitor verified this sprint.
+------------------------------------------------------------------------------
+#13  DONE-FOR-YOU LANDLORD COMPLIANCE SETUP & ANNUAL AUDIT
+    Score 64/100 - Service
+    Who it's for: UK landlords with 3–20 properties who lack time
+    Problem:      Landlords lack time to gather certificates and build a compliance record, and want a yearly check.
+    Solution:     Setup service: gather certificates, build the Landlord OS, annual audit call and update.
+    Price idea:   £149 setup + £99/year audit (hypothesis)
+    Competitors:
+      - Landlord Compliance (http://landlordcompliance.io): Free for 10 properties including email reminders.
+      - ComplyGuard: Founding offer £19/month for up to 10 properties; 14-day trial.
+------------------------------------------------------------------------------
+#14  CARRIER VETTING SAAS WITH FRAUD FLAGS
+    Score 63/100 - Software Product
+    Who it's for: Small freight brokers
+    Problem:      Manual vetting misses fraud signals.
+    Solution:     SaaS combining public carrier data and fraud flags.
+    Price idea:   $79–$199/month (hypothesis)
+    Competitors:
+      - CarrierScrub: Free checks; paid plans from $79/month.
+      - Truckstop RMIS: From $340/month (third-party comparison).
+------------------------------------------------------------------------------
+#15  LANDLORD MTD RECORD-KEEPING WORKBOOK
+    Score 63/100 - Digital Product
+    Who it's for: UK landlords with qualifying income over £50,000 now, and those below later thresholds
+    Problem:      Making Tax Digital for Income Tax requires digital records and quarterly updates; many landlords keep paper or ad-hoc records.
+    Solution:     Per-property income and expense workbook with quarterly summaries to hand to HMRC-recognised software or an accountant.
+    Price idea:   £29 one-time (hypothesis)
+    Competitors:
+      - TenancyVault: Free for 1 property; property-based pricing.
+      - FreeAgent: Sole trader plan £19/month ex VAT; free with NatWest, RBS or Ulster business accounts.
+      - (rest of this list was cut off in the recovered record)
+------------------------------------------------------------------------------
+#16  WHITE-LABEL MTD CLIENT-ONBOARDING PACK FOR BOOKKEEPERS
+    Score 63/100 - Digital Product
+    Who it's for: UK bookkeepers and small accounting practices
+    Problem:      Practices must explain MTD to many clients and collect records consistently.
+    Solution:     Client letters, checklists and an onboarding tracker licensed for practice branding.
+    Price idea:   £99–£199 licence (hypothesis)
+    Competitors:
+      - No priced direct competitor verified this sprint.
+------------------------------------------------------------------------------
+#17  FREIGHT BROKER CARRIER-VETTING SOP & TRAINING KIT
+    Score 62/100 - Digital Product
+    Who it's for: Small US freight brokerages (1–20 staff)
+    Problem:      Double brokering and carrier fraud cause losses; small brokers lack documented vetting.
+    Solution:     SOP library, vetting checklist, red-flag log and staff training module.
+    Price idea:   $99–$199 (hypothesis)
+    Competitors:
+      - CarrierScrub: Free checks; paid plans from $79/month.
+      - Truckstop RMIS: From $340/month (third-party comparison).
+      - Armstrong & Associates: Carrier vetting & compliance self-audit guide sold (price not captured).
+------------------------------------------------------------------------------
+#18  WHITE-LABEL MONTHLY CLIENT REPORTING SERVICE
+    Score 62/100 - Service
+    Who it's for: Agencies with 10+ retainer clients
+    Problem:      Reporting consumes account-manager hours every month.
+    Solution:     Done-for-you monthly reports with commentary.
+    Price idea:   £150–£300 per client/month (hypothesis)
+    Competitors:
+      - AgencyAnalytics: $20 per client per month on the core plan.
+------------------------------------------------------------------------------
+#19  LIGHTWEIGHT RECRUITMENT CRM SAAS FOR SOLO RECRUITERS
+    Score 61/100 - Software Product
+    Who it's for: Solo recruiters and micro agencies
+    Problem:      Same per-seat cost problem; recruiters also want job-board and email integration that a template cannot offer.
+    Solution:     Focused SaaS for solo recruiters with pipeline, email sync and placement tracking.
+    Price idea:   $29–$49/month (hypothesis)
+    Competitors:
+      - Manatal: Professional $15/user/month annual ($19 monthly), capped at 15 jobs.
+      - Recruit CRM: Pro $95, Business $135, Enterprise $215 per user/month billed annually ($109/$159/$259 monthly).
+      - (rest of this list was cut off in the recovered record)
+------------------------------------------------------------------------------
+#20  FRACTIONAL OPERATIONS MANAGER RETAINER
+    Score 61/100 - Service
+    Who it's for: Owners of 5–20 person businesses with no operations lead
+    Problem:      Nobody owns admin, systems and supplier management, so the founder does it.
+    Solution:     Monthly retainer running the admin calendar, SOP upkeep, supplier renewals and reporting.
+    Price idea:   £750–£1,500/month (hypothesis)
+    Competitors:
+      - No priced direct competitor verified this sprint.
+------------------------------------------------------------------------------
+
+Next step for every idea: talk to 5-10 real buyers before spending money.
