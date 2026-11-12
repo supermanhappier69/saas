@@ -3,7 +3,7 @@ import { html, raw, attrs, render, flashes, alert, button, csrfField, postButton
 import { roleRank, ROLE_LABELS } from './auth.js';
 import { icon, hasIcon } from './icons.js';
 
-export const ASSET_VERSION = '2.0.0';
+export const ASSET_VERSION = '3.0.0';
 
 export function documentShell(def, { title, description = '', body, bodyClass = '', styles = [], preloadDisplay = false }) {
   const theme = def.theme?.css ? html`<link rel="stylesheet" href="/static/${def.theme.css}?v=${ASSET_VERSION}">` : '';

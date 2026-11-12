@@ -7,6 +7,7 @@ const assert = (await import('node:assert/strict')).default;
 const { startTestApp } = await import('../../../test/helpers.js');
 const { definition } = await import('../definition.js');
 const { invoiceFigures } = await import('../lib/calc.js');
+const { ASSET_VERSION } = await import('../../../core/layout.js');
 
 let t;
 let owner;
@@ -51,7 +52,7 @@ test('fonts, the marketing stylesheet and the favicon are served', async () => {
   assert.equal(font.headers.get('content-type'), 'font/woff2');
   const serif = await c.get('/assets/fonts/source-serif-4-var.woff2?v=2');
   assert.equal(serif.status, 200);
-  const css = await c.get('/assets/marketing.css?v=2.0.0');
+  const css = await c.get(`/assets/marketing.css?v=${ASSET_VERSION}`);
   assert.equal(css.status, 200);
   assert.match(css.headers.get('content-type'), /^text\/css/);
   const icon = await c.get('/static/favicon.svg');

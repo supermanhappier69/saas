@@ -64,6 +64,19 @@ function calcMock() {
   return html`<div class="mock-card mock-sheet" role="img" aria-label="A worked statutory interest calculation for a £12,500 invoice paid 63 days late."><div class="mock-card-head"><strong>${EXAMPLE.number} · ${EXAMPLE.customer}</strong>${badge(`${FIG.daysOverdue} days late`, 'red')}</div><dl class="mock-calc"><div><dt>Unpaid balance</dt><dd>${gbp(FIG.balance)}</dd></div><div><dt>Due date</dt><dd>${fmtDateUK(EXAMPLE.due, true)}</dd></div><div><dt>Reference rate<small>Bank Rate on ${fmtDateUK(ref.refDate, true)}</small></dt><dd>${pct(ref.rate)}</dd></div><div><dt>Statutory rate<small>8% plus the reference rate</small></dt><dd>${pct(FIG.annualRate)} a year</dd></div><div><dt>Interest per day</dt><dd>${gbp(FIG.dailyInterest)}</dd></div><div><dt>Interest to ${fmtDateUK(EXAMPLE.on, true)}</dt><dd>${gbp(FIG.interest)}</dd></div><div><dt>Fixed compensation<small>Debts of £10,000 or more</small></dt><dd>${gbp(FIG.fixedSum)}</dd></div><div class="mock-calc-total"><dt>You can claim</dt><dd>${gbp(FIG.claimable)}</dd></div></dl></div>`;
 }
 
+const SEGMENTS = [
+  ['Trades and construction', 'Subcontractors on long terms and retentions, chasing main contractors who pay when it suits them.'],
+  ['Agencies and consultancies', 'Retainers and project invoices that drift from 30 days to 90 while the work carries on.'],
+  ['IT and managed services', 'Monthly invoices to clients who always mean to pay next week.'],
+  ['Wholesale and distribution', 'Trade accounts with credit limits, and customers who keep ordering while they are overdue.'],
+];
+
+const SOURCES = [
+  ['Late Payment of Commercial Debts (Interest) Act 1998', 'https://www.legislation.gov.uk/ukpga/1998/20'],
+  ['GOV.UK guidance on late commercial payments', 'https://www.gov.uk/late-commercial-payments-interest-debt-recovery'],
+  ['Bank of England Bank Rate', 'https://www.bankofengland.co.uk/monetary-policy/the-interest-rate-bank-rate'],
+];
+
 const STATS = [
   ['£26bn', 'owed to UK businesses in late payments at any one time'],
   ['14,000', 'businesses close every year because of late payment, 38 a day'],
@@ -116,6 +129,12 @@ export function landingBody(ctx) {
     ['No integration', 'Type invoices in or import a CSV from your accounts'],
   ].map(([v, l]) => html`<div><dt>${v}</dt><dd>${l}</dd></div>`)}</dl></div></section>`;
 
+  const calc = html`<section class="mk-calc" id="calculator" aria-labelledby="calc-title"><div class="container"><div class="mk-calc-inner"><div class="mk-calc-copy">${kicker('Free calculator')}<h2 class="mk-calc-title" id="calc-title">What is one late invoice worth?</h2><p>Enter an unpaid invoice to see the statutory interest and fixed compensation you could add to it today.</p></div><form class="mk-calc-form" method="get" action="/calculator"><div class="mk-calc-field"><label for="lc-amount">Amount owed</label><div class="input-affix"><span class="affix">£</span><input id="lc-amount" name="amount" inputmode="decimal" autocomplete="off" placeholder="2,400.00" required></div></div><div class="mk-calc-field"><label for="lc-due">Date it was due</label><input id="lc-due" name="due" type="date" required></div>${button('Work it out', { variant: 'primary' })}</form></div></div></section>`;
+
+  const segments = html`<section class="mk-section mk-section-tint" id="who"><div class="container">${head('Who it’s for', 'For businesses that invoice other businesses, and chase it themselves.', 'Usually 1 to 50 people, with nobody whose job is credit control. If you sell to consumers, the statutory interest rules don’t apply, so PaidOnTime isn’t for you.')}<div class="mk-segments">${SEGMENTS.map(
+    ([title, text]) => html`<div class="mk-segment"><h3>${title}</h3><p>${text}</p></div>`,
+  )}</div></div></section>`;
+
   const problem = html`<section class="mk-section" id="problem"><div class="container mk-split"><div class="mk-split-head">${kicker('Why it matters')}<h2 class="mk-h2">Late payment is a cost most businesses never put a number on.</h2></div><div class="mk-split-body"><p class="mk-lede">Most small firms chase when they remember, feel awkward doing it, and never claim the interest the law already gives them. So the customers who pay last still get paid first.</p><dl class="mk-stats">${STATS.map(
     ([v, l]) => html`<div><dt>${v}</dt><dd>${l}</dd></div>`,
   )}</dl><p class="mk-source">Source: <a href="https://www.smallbusinesscommissioner.gov.uk/late-payments-research-2/" rel="noopener noreferrer" target="_blank">Late Payments Research</a>, London Economics for the Department for Business and Trade and the Office of the Small Business Commissioner, July 2025.</p></div></div></section>`;
@@ -138,8 +157,8 @@ export function landingBody(ctx) {
       'Reference rates built in, with the source shown',
       'Part payments reduce interest from the day they arrive',
       'Claim letters and letter before action set out the sums',
-    ], calcMock(), false, html`<p class="mk-aside">The Commercial Payments Bill, introduced to Parliament in May 2026, would make statutory interest mandatory and cap payment terms at 60 days. <a href="/calculator">Work out what an invoice is owed now</a>.</p>`)
-  }</div></section>`;
+    ], calcMock(), false, html`<p class="mk-aside">The Commercial Payments Bill, introduced to Parliament in May 2026, would make statutory interest mandatory and cap payment terms at 60 days. <a href="/calculator">Work out what an invoice is owed now</a>.</p><p class="mk-sources">Built on ${SOURCES.map(([label, href], i) => html`${i ? (i === SOURCES.length - 1 ? ' and ' : ', ') : ''}<a href="${href}" rel="noopener noreferrer" target="_blank">${label}</a>`)}.</p>`)
+  }<div class="mk-inline-cta"><p><strong>See it with your own invoices.</strong> Setting up takes about ten minutes, and the trial needs no card.</p><div class="mk-actions">${button('Start free trial', { href: '/signup', variant: 'primary' })}${button('Explore the demo', { href: '/demo' })}</div></div></div></section>`;
 
   const ladder = html`<section class="mk-section mk-section-tint" id="ladder"><div class="container">${head('The chase ladder', 'Six steps from a polite nudge to a letter before action.', 'Each stage has its own template, timing and tone. The timings follow these defaults until you change them to suit your terms.')}<ol class="mk-ladder">${LADDER.map(
     (s, i) => html`<li class="mk-rung mk-rung-${s.tone}"><p class="mk-rung-when"><span class="mk-rung-n">${i}</span>${s.when}</p><h3>${s.name}</h3><p>${s.text}</p></li>`,
@@ -161,7 +180,7 @@ export function landingBody(ctx) {
     'CSV import, and export of everything at any time',
     'Demo data to learn on, removed in one click',
     'Guides and a credit control SOP, built in',
-  ].map((p) => html`<li>${icon('check')}<span>${p}</span></li>`)}</ul></aside></div></div></section>`;
+  ].map((p) => html`<li>${icon('check')}<span>${p}</span></li>`)}</ul><p class="mk-roi"><strong>One claim can cover it.</strong> The fixed compensation on a single late invoice of £1,000 or more is £70, more than Core costs.</p></aside></div></div></section>`;
 
   const faq = html`<section class="mk-section mk-section-rule" id="faq"><div class="container mk-split"><div class="mk-split-head">${kicker('Questions')}<h2 class="mk-h2">The details, answered.</h2><p class="mk-muted">Something else? <a href="/contact">Send us a question</a> and we'll reply by email.</p></div><div class="mk-split-body">${faqList(def)}</div></div></section>`;
 
@@ -169,5 +188,5 @@ export function landingBody(ctx) {
     button('Start free trial', { href: '/signup', variant: 'primary', size: 'lg' })
   }${button('Explore the demo', { href: '/demo', size: 'lg' })}</div></div></section>`;
 
-  return html`${hero}${facts}${problem}${how}${ladder}${tools}${compare}${pricing}${faq}${closing}`;
+  return html`${hero}${facts}${calc}${problem}${segments}${how}${ladder}${tools}${compare}${pricing}${faq}${closing}`;
 }
