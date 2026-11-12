@@ -5,10 +5,11 @@ import { appPage, printPage, publicPage } from '../../../core/layout.js';
 import { requireRole, can } from '../../../core/crud.js';
 import { cleanSettings } from '../../../core/workspace.js';
 import { ladderFrom } from '../lib/ladder.js';
-import { startHere, sop, numbersGuide, policy, POLICY_FIELDS, SOURCES, DISCLAIMER } from '../lib/docs.js';
+import { startHere, sop, numbersGuide, policy, POLICY_FIELDS, SOURCES, DISCLAIMER, BILL_NOTE } from '../lib/docs.js';
 import { invoiceFigures, rateCheck, fmtShort } from '../lib/calc.js';
 import { referenceRateTable, RATES_CHECKED_THROUGH, BANK_RATE_SOURCE } from '../lib/rates.js';
 import { isComplete, upgradeCard } from './app.js';
+import { countCalculatorUse } from './founder.js';
 
 const md = (text) => raw(`<div class="prose">${mdToHtml(text)}</div>`);
 const DOCS = {
@@ -127,7 +128,8 @@ export function policyPrint(ctx) {
 export function publicCalculator(ctx) {
   const def = ctx.definition;
   const calc = calculator(ctx, '/calculator');
-  const body = html`<section class="section"><div class="container narrow"><p class="eyebrow">Free calculator</p><h1>UK late payment interest calculator</h1><p class="lead">Work out the statutory interest and fixed compensation you can claim on a late business invoice. The Bank of England reference rate is looked up for you.</p>${calc.result}${card({ body: calc.form })}<div class="prose"><h2>What this works out</h2><ul><li>Statutory interest at 8% a year plus the Bank of England reference rate, as simple interest for each day late (<a href="${SOURCES.govInterest}" rel="noopener noreferrer" target="_blank">GOV.UK</a>).</li><li>The reference rate in force on 30 June or 31 December before interest starts, fixed for the debt (<a href="${SOURCES.order}" rel="noopener noreferrer" target="_blank">2002 Order, article 4</a>).</li><li>Fixed compensation of £40, £70 or £100 per invoice (<a href="${SOURCES.act5A}" rel="noopener noreferrer" target="_blank">section 5A</a>).</li></ul><p>Only for business-to-business debts where your contract doesn't set its own late-payment interest. ${DISCLAIMER}</p></div>${card({
+  if (ctx.query.amount !== undefined) countCalculatorUse(ctx.services.db);
+  const body = html`<section class="section"><div class="container narrow"><p class="eyebrow">Free calculator</p><h1>UK late payment interest calculator</h1><p class="lead">Work out the statutory interest and fixed compensation you can claim on a late business invoice. The Bank of England reference rate is looked up for you.</p>${calc.result}${card({ body: calc.form })}<div class="prose"><h2>What this works out</h2><ul><li>Statutory interest at 8% a year plus the Bank of England reference rate, as simple interest for each day late (<a href="${SOURCES.govInterest}" rel="noopener noreferrer" target="_blank">GOV.UK</a>).</li><li>The reference rate in force on 30 June or 31 December before interest starts, fixed for the debt (<a href="${SOURCES.order}" rel="noopener noreferrer" target="_blank">2002 Order, article 4</a>).</li><li>Fixed compensation of £40, £70 or £100 per invoice (<a href="${SOURCES.act5A}" rel="noopener noreferrer" target="_blank">section 5A</a>).</li></ul><p>Only for business-to-business debts where your contract doesn't set its own late-payment interest. ${DISCLAIMER}</p>${md(BILL_NOTE)}<h2>Free templates to send with the figure</h2><ul><li><a href="/free/payment-reminder-templates">Payment reminder emails and a phone script</a></li><li><a href="/free/letter-before-action">Interest claim and letter before action</a></li><li><a href="/free/payment-terms">Payment terms and credit policy</a></li></ul></div>${card({
     cls: 'callout',
     title: 'Knowing the figure is the easy part',
     body: html`<p>${def.name} runs the whole chasing process: a chase calendar that tells you what to send and when, ready-to-send emails and letters with these figures filled in, a credit control routine and a payment terms policy.</p><p>${button('Try the demo', { href: '/demo', variant: 'primary' })} ${button('Join the waitlist', { href: '/waitlist' })}</p>`,

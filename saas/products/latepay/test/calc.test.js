@@ -149,6 +149,11 @@ test('the ladder waits after a contact and schedules the next stage', () => {
   assert.equal(later.on, '2026-12-08');
   // A promise in the future: check it arrived the day after.
   assert.equal(act({ due_date: '2026-10-01', promised_date: '2026-11-20' }).on, '2026-11-21');
+  // A follow-up date set in the future defers a stage that would otherwise be due now ("remind me tomorrow").
+  const snoozed = act({ due_date: '2026-11-12' }, [{ date: '2026-11-11', channel: 'Other', next_follow_up: '2026-11-12' }]);
+  assert.equal(snoozed.stage, 0);
+  assert.equal(snoozed.on, '2026-11-12');
+  assert.equal(snoozed.now, false);
   assert.equal(stageForDays(0, 5, L), null);
   // Custom timings stay in order even if entered badly.
   const custom = ladderFrom({ pre_due_days: 5, stage2_from: 10, stage3_from: 9, stage4_from: 'x', stage5_from: 60 });

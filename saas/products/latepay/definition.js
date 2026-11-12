@@ -1,15 +1,17 @@
 // PaidOnTime: the UK Late Payment & Credit Control Kit as a working app on the shared core.
-import { addDays, todayISO, fmtGBP, fmtDateUK } from '../../core/util.js';
+import { HttpError, addDays, todayISO, fmtGBP, fmtDateUK } from '../../core/util.js';
 import { html, badge } from '../../core/ui.js';
 import { BUSINESS_FIELDS } from '../../core/workspace.js';
 import { buildResources, seedTemplates, allInvoices, base } from './resources.js';
 import { seedSamples } from './lib/sample.js';
 import { DEFAULT_LADDER } from './lib/ladder.js';
 import {
-  dashboard, chaseList, chaseBoard, calendarPage, icsFeed, resetFeed, composePage, composeSend, letterGet, letterPost, logLetter,
+  dashboard, chaseList, chaseNext, chaseSkip, chaseBoard, calendarPage, icsFeed, resetFeed, composePage, composeSend, letterGet, letterPost, logLetter,
   statement, reports, invoiceDetail, invoiceSide, customerDetail,
 } from './pages/app.js';
 import { guidePage, guidePrint, policyPage, policySave, policyPrint, publicCalculator, waitlistGet, waitlistPost } from './pages/guides.js';
+import { freePage, freeTermsPage } from './pages/free.js';
+import { registerFounder, isFounder } from './pages/founder.js';
 
 const resources = buildResources();
 const R = Object.fromEntries(resources.map((r) => [r.name, r]));
@@ -28,6 +30,7 @@ const SETTINGS_FIELDS = [
   { key: 'default_terms', label: 'Standard payment terms (days)', type: 'int', min: 0, max: 120, required: true, group: 'Credit control' },
   { key: 'stop_days', label: 'Pause work when an invoice is this many days overdue', type: 'int', min: 1, max: 365, required: true, group: 'Credit control' },
   { key: 'weekly_digest', label: 'Email admins the chase list every Monday morning', type: 'bool', group: 'Credit control' },
+  { key: 'email_footer', label: 'Add “Sent with PaidOnTime” to the end of reminder emails (removed on the Complete plan)', type: 'bool', group: 'Credit control' },
   { key: 'pre_due_days', label: 'Pre-due reminder: days before the due date', type: 'int', min: 0, max: 30, required: true, group: 'Chase ladder (days overdue each stage starts)' },
   { key: 'stage2_from', label: 'Stage 2, firm reminder and call', type: 'int', min: 2, max: 365, required: true, group: 'Chase ladder (days overdue each stage starts)' },
   { key: 'stage3_from', label: 'Stage 3, final notice', type: 'int', min: 3, max: 365, required: true, group: 'Chase ladder (days overdue each stage starts)' },
@@ -63,10 +66,10 @@ export const definition = {
       flags: { complete: true },
     },
   ],
-  defaultSettings: { default_terms: 30, stop_days: 30, weekly_digest: true, ...DEFAULT_LADDER },
+  defaultSettings: { default_terms: 30, stop_days: 30, weekly_digest: true, email_footer: true, ...DEFAULT_LADDER },
   settingsFields: SETTINGS_FIELDS,
   resources,
-  nav: [
+  nav: (ctx) => [
     { id: 'dashboard', label: 'Dashboard', href: '/app' },
     { id: 'chase', label: 'Chase list', href: '/app/chase' },
     { id: 'invoices', label: 'Invoices', href: '/app/invoices' },
@@ -77,15 +80,16 @@ export const definition = {
     { id: 'reports', label: 'Monthly review', href: '/app/reports' },
     { id: 'policy', label: 'Credit policy', href: '/app/policy' },
     { id: 'guides', label: 'Guides', href: '/app/guides' },
+    ...(isFounder(ctx) ? [{ id: 'founder', label: 'Founder console', href: '/app/founder' }] : []),
   ],
   marketing: {
     cta: 'Start free trial',
-    nav: [{ label: 'How it works', href: '/#how' }, { label: 'Pricing', href: '/pricing' }, { label: 'Interest calculator', href: '/calculator' }, { label: 'Demo', href: '/demo' }],
-    eyebrow: 'For UK businesses that invoice other businesses',
+    nav: [{ label: 'How it works', href: '/#how' }, { label: 'Pricing', href: '/pricing' }, { label: 'Free calculator', href: '/calculator' }, { label: 'Free templates', href: '/free/payment-reminder-templates' }, { label: 'Demo', href: '/demo' }],
+    eyebrow: 'Credit control for UK businesses that invoice other businesses',
     headline: 'Get paid on time, and know exactly what you\'re owed when you\'re not.',
-    subhead: 'PaidOnTime tells you what to send next for every unpaid invoice, writes the email or letter for you, and works out the statutory interest and compensation UK law lets you claim.',
+    subhead: 'PaidOnTime tells you what to send next for every unpaid invoice, writes the email or letter for you, and works out the statutory interest and compensation UK law lets you claim: 8% plus the base rate and £40–£100 per invoice.',
     reassurance: '14-day free trial. No card needed. One price after that, no subscription.',
-    metaDescription: 'Credit control for UK small businesses: a chase calendar, ready-to-send reminders and letters, and statutory late payment interest and compensation worked out.',
+    metaDescription: 'Credit control for UK small businesses: a chase calendar, ready-to-send reminders and letters, and statutory late payment interest and compensation worked out. One price, no subscription.',
     heroPanel: html`<div class="card hero-card"><div class="card-head"><h2>Chase list · Monday</h2></div><div class="card-body"><ul class="action-list">${[
       ['INV-1003', 'Northgate Events Ltd', '£12,500.00 · 63 days overdue', 'Letter before action', 'red'],
       ['INV-1001', 'Brightside Joinery Ltd', '£2,400.00 · 41 days overdue', 'Chase the broken promise', 'red'],
@@ -94,7 +98,7 @@ export const definition = {
     ].map(([n, c, meta, label, tone]) => html`<li class="action-item"><div><strong>${n}</strong> · ${c}<div class="action-meta">${meta}</div></div>${badge(label, tone)}</li>`)}</ul><p class="small muted">Claimable on INV-1003: £253.51 interest + £100 compensation (sample figures)</p></div></div>`,
     problem: {
       title: 'Late payment is costing you more than you think',
-      intro: 'Most small businesses chase when they remember, feel awkward doing it, and never claim what the law allows.',
+      intro: 'Businesses hit by late payment spend 86 hours a year chasing and are owed £17,000 on average. Most chase when they remember, feel awkward doing it, and never claim what the law allows.',
       points: [
         'Chasing is ad hoc, so the customers who pay last get paid first.',
         'Nobody knows which reminder went out, or what was promised on the phone.',
@@ -102,6 +106,40 @@ export const definition = {
         'Credit control software costs £45 to £199+ a month and needs an accounting integration.',
       ],
     },
+    sections: [
+      {
+        id: 'stats',
+        title: 'The size of the problem',
+        body: html`<p class="section-intro">From research for the Department for Business and Trade and the Small Business Commissioner (London Economics, July 2025).</p><div class="kpi-grid">${[
+          ['£26bn', 'owed to UK businesses in late payments at any one time'],
+          ['14,000', 'businesses close every year because of late payment, 38 a day'],
+          ['86 hours', 'a year spent chasing, per affected business'],
+          ['£17,000', 'owed on average to each affected business'],
+        ].map(([v, l]) => html`<div class="kpi-card"><span class="kpi-value">${v}</span><span class="kpi-label">${l}</span></div>`)}</div><p class="section-intro small muted"><a href="https://www.smallbusinesscommissioner.gov.uk/late-payments-research-2/" rel="noopener noreferrer" target="_blank">Source: Late Payments Research, Office of the Small Business Commissioner</a></p>`,
+      },
+      {
+        id: 'law',
+        title: 'The law is on your side, and it is about to get stronger',
+        alt: true,
+        body: html`<p class="section-intro">The Late Payment of Commercial Debts (Interest) Act 1998 already lets any UK business claim statutory interest and a fixed sum on late business invoices. The Commercial Payments Bill, introduced to Parliament in May 2026, would make that interest mandatory and non-excludable, cap payment terms at 60 days and let the Small Business Commissioner fine persistent late payers.</p><div class="feature-grid">${[
+          ['8% + base rate', 'Statutory interest a year on the unpaid balance, from the day after the due date. PaidOnTime uses the right Bank of England reference rate automatically.'],
+          ['£40, £70 or £100', 'Fixed compensation per invoice, depending on its size. Claimable on top of interest.'],
+          ['The right wording', 'A final notice, an interest claim and a letter before action that set out the figures and the deadline properly. Solicitor review recommended before first use.'],
+        ].map(([t, x]) => html`<div class="feature"><h3>${t}</h3><p>${x}</p></div>`)}</div><p class="section-intro"><a href="/calculator">Work out what you are owed on an invoice now</a>.</p>`,
+      },
+      {
+        id: 'compare',
+        title: 'Why not a spreadsheet, a free calculator or credit control software?',
+        body: html`<div class="table-wrap"><table class="table"><thead><tr><th scope="col"></th><th scope="col">Spreadsheet</th><th scope="col">Free interest calculator</th><th scope="col">Credit control software</th><th scope="col">PaidOnTime</th></tr></thead><tbody>${[
+          ['Tells you what to send next, and when', '', '', tick, tick],
+          ['Reminder emails and letters written for you', '', '', tick, tick],
+          ['Statutory interest and fixed sum worked out', 'If you build it', tick, 'Some', tick],
+          ['Credit policy, SOP and weekly routine', '', '', '', tick],
+          ['Needs an accounting integration', '', '', 'Yes', 'No'],
+          ['Price', 'Free', 'Free', '£45–£199+ a month', '£49 or £99 once'],
+        ].map(([label, ...cells]) => html`<tr><th scope="row">${label}</th>${cells.map((c, i) => html`<td data-label="${['Spreadsheet', 'Free calculator', 'Credit control software', 'PaidOnTime'][i]}">${c || html`<span class="muted">—</span>`}</td>`)}</tr>`)}</tbody></table></div>`,
+      },
+    ],
     featuresTitle: 'The whole chasing process, not just a calculator',
     features: [
       { icon: '📅', title: 'A chase calendar', text: 'Every invoice gets a next action and a date, from a pre-due reminder to a letter before action. Subscribe in Google or Outlook, and get the week\'s list every Monday.' },
@@ -116,21 +154,6 @@ export const definition = {
       { title: 'Add customers and unpaid invoices', text: 'Type them in or import a CSV from Xero, QuickBooks, FreeAgent or Sage.' },
       { title: 'Open the chase list on Monday', text: 'It shows what to send to whom, today. Calls and broken promises are flagged.' },
       { title: 'Send, log, get paid', text: 'Send the reminder from the app, record payments, and claim interest when it\'s due.' },
-    ],
-    sections: [
-      {
-        id: 'compare',
-        title: 'Why not a spreadsheet, a free calculator or credit control software?',
-        alt: true,
-        body: html`<div class="table-wrap"><table class="table"><thead><tr><th scope="col"></th><th scope="col">Spreadsheet</th><th scope="col">Free interest calculator</th><th scope="col">Credit control software</th><th scope="col">PaidOnTime</th></tr></thead><tbody>${[
-          ['Tells you what to send next, and when', '', '', tick, tick],
-          ['Reminder emails and letters written for you', '', '', tick, tick],
-          ['Statutory interest and fixed sum worked out', 'If you build it', tick, 'Some', tick],
-          ['Credit policy, SOP and weekly routine', '', '', '', tick],
-          ['Needs an accounting integration', '', '', 'Yes', 'No'],
-          ['Price', 'Free', 'Free', '£45–£199+ a month', '£49 or £99 once'],
-        ].map(([label, ...cells]) => html`<tr><th scope="row">${label}</th>${cells.map((c) => html`<td>${c || html`<span class="muted">—</span>`}</td>`)}</tr>`)}</tbody></table></div>`,
-      },
     ],
     faq: [
       { q: 'Is it legal to charge interest on late invoices?', a: 'Yes, between businesses. The Late Payment of Commercial Debts (Interest) Act 1998 lets you claim statutory interest at 8% a year plus the Bank of England reference rate, and fixed compensation of £40, £70 or £100 per invoice, unless your contract sets its own late-payment terms. It does not apply to consumer sales.' },
@@ -158,8 +181,16 @@ export const definition = {
     router.get('/calculator', publicCalculator);
     router.get('/waitlist', waitlistGet);
     router.post('/waitlist', waitlistPost);
+    router.get('/free/payment-terms', freeTermsPage);
+    router.get('/free/:page', (ctx) => {
+      const page = freePage(ctx);
+      if (!page) throw new HttpError(404, 'Page not found');
+      return page;
+    });
     router.get('/feed/:token.ics', icsFeed, { public: true });
     router.get('/app/chase', chaseList);
+    router.get('/app/chase/next', chaseNext);
+    router.get('/app/chase/skip/:id', chaseSkip);
     router.get('/app/chase/board', chaseBoard);
     router.get('/app/chase/calendar', calendarPage);
     router.post('/app/chase/calendar/reset', resetFeed);
@@ -176,6 +207,7 @@ export const definition = {
     router.post('/app/invoices/:id/letter', letterPost);
     router.post('/app/invoices/:id/log-letter', logLetter);
     router.get('/app/customers/:id/statement', statement);
+    registerFounder(router);
   },
   dashboard,
   jobs: {

@@ -16,6 +16,18 @@ export const SOURCES = {
 
 export const DISCLAIMER = 'General information based on official UK guidance, not legal advice. Check your own contracts and take advice before formal recovery.';
 
+/** The Commercial Payments Bill, as introduced in May 2026. Update this once it has Royal Assent and commencement dates. */
+export const BILL_NOTE = `## The law is changing: the Commercial Payments Bill
+
+The Commercial Payments Bill was introduced to Parliament in May 2026 and is expected to become law in 2027 ([GOV.UK overview](https://www.gov.uk/government/publications/commercial-payments-bill-factsheets/commercial-payments-bill-overview)). As introduced, it would:
+
+- make statutory interest at **8% above the Bank of England base rate mandatory**, so contracts could no longer exclude or reduce it;
+- cap payment terms at **60 days** (30 days for public authorities), with limited exemptions;
+- give suppliers a fixed sum when a buyer disputes an invoice **late** (less than eight days before it is due) or without enough information;
+- let the Small Business Commissioner adjudicate payment disputes for suppliers with fewer than 50 staff, investigate persistent late payers and fine them.
+
+None of it is law yet and nothing applies retrospectively. Keep claiming under the current rules; this app will be updated when the Bill commences.`;
+
 export function startHere(L) {
   const b = ladderBands(L);
   return `## Set up (15 minutes)
@@ -185,6 +197,8 @@ export function numbersGuide() {
 - **Disputed invoices** still show figures, but the next action tells you to resolve the dispute first.
 - **Written-off invoices** stop accruing.
 - Check unusual cases with the [Small Business Commissioner's interest calculator](${SOURCES.sbc}).
+
+${BILL_NOTE}
 
 *${DISCLAIMER}*`;
 }

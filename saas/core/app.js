@@ -70,6 +70,8 @@ export function loadConfig(def, env = process.env) {
     SUPPORT_EMAIL: env.SUPPORT_EMAIL || '',
     LOG_REQUESTS: isTrue(env.LOG_REQUESTS),
     DISABLE_JOBS: isTrue(env.DISABLE_JOBS),
+    // People who can open the founder console, by login email. Outside production the first user also can.
+    FOUNDER_EMAILS: String(env.FOUNDER_EMAILS || '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean),
   };
   for (const [k, v] of Object.entries(env)) if (k.startsWith('STRIPE_PRICE_') && v) config[k] = v;
   return config;

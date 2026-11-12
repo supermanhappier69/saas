@@ -2,7 +2,7 @@
 import { html, attrs, render, flashes, alert, button, csrfField, postButton, tone } from './ui.js';
 import { roleRank, ROLE_LABELS } from './auth.js';
 
-export const ASSET_VERSION = '1.0.0';
+export const ASSET_VERSION = '1.1.0';
 
 export function documentShell(def, { title, description = '', body, bodyClass = '' }) {
   const theme = def.theme?.css ? html`<link rel="stylesheet" href="/static/${def.theme.css}?v=${ASSET_VERSION}">` : '';
@@ -43,7 +43,7 @@ export function authPage(def, ctx, { title, intro = null, body, footer = null })
 
 export function navSections(ctx) {
   const def = ctx.definition;
-  const main = def.nav || [
+  const main = (typeof def.nav === 'function' ? def.nav(ctx) : def.nav) || [
     { id: 'dashboard', label: 'Dashboard', href: '/app' },
     ...ctx.services.resources.all.filter((r) => r.nav !== false).map((r) => ({ id: r.name, label: r.label, href: `/app/${r.name}` })),
   ];

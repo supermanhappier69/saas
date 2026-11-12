@@ -1,39 +1,48 @@
 /* Loaded with media="print": plain black-on-white output for letters, packs and documents. */
 
-@page { margin: 18mm; }
+@page { size: A4; margin: 18mm; }
 
 html, body, body.app, body.public, body.print-page { background: #fff !important; color: #000 !important; }
 body { font-size: 11pt; line-height: 1.45; }
+*, *::before, *::after { box-shadow: none !important; text-shadow: none !important; -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
 
 .no-print, .sidebar, .topbar, .site-header, .site-footer, .flashes, .print-toolbar, .skip, .nav-toggle,
-.btn, button, form, .hp, .page-actions, .filter-bar, .pager, .tabs { display: none !important; }
+.btn, button, form, .hp, .page-actions, .filter-bar, .pager, .tabs,
+.hero-visual, .cta-band, .cta-box, .trust-strip, .onboarding, .plan-toc, .sample-banner { display: none !important; }
 
 .shell { display: block; }
 .main-col, .main { display: block; width: auto; max-width: none; padding: 0; margin: 0; }
 .container, .container.narrow { width: auto; max-width: none; }
+.section, .section.alt, .hero { padding: 0; background: none; border: 0; }
+.hero::before { display: none; }
 
-.doc { width: auto; min-height: 0; margin: 0; padding: 0; background: #fff; color: #000; box-shadow: none; border: 0; }
+.doc { width: auto; min-height: 0; margin: 0; padding: 0; background: #fff; color: #000; line-height: 1.5; border: 0; border-radius: 0; box-shadow: none; }
 .doc h1, .doc h2, .doc h3, .doc h4 { color: #000; break-after: avoid; page-break-after: avoid; }
 .doc p, .doc li { orphans: 3; widows: 3; }
+.plan-doc, .prose { display: block; }
+.plan-doc h2 { break-after: avoid; page-break-after: avoid; }
 
-.card, .stat, .figure, .callout, .calc-result, .board-card, .letter, .letterhead, .detail, .timeline li, .checklist li, .md-table, blockquote, pre, img, svg {
+.card, .stat, .figure, .callout, .calc-result, .board-card, .letter, .letterhead, .detail, .timeline li, .checklist li, .md-table, .kpi-card, .free-template, blockquote, pre, img, svg {
   break-inside: avoid; page-break-inside: avoid;
 }
-.card { background: #fff; border: 1px solid #999; box-shadow: none; }
+.card, .kpi-card, .free-template { background: #fff; border: 1px solid #999; border-radius: 0; box-shadow: none; }
+.free-template { border-top-width: 1px; }
+.stat { border: 1px solid #999; border-radius: 0; }
+.stat::before, .nav-link.active::before { display: none; }
 .card-head, .card-foot { background: #fff; border-color: #999; }
-.callout, .calc-result, .alert, .prose blockquote { background: #fff; color: #000; border: 1px solid #666; border-left-width: 4px; }
+.callout, .calc-result, .alert, .prose blockquote, .plan-doc blockquote { background: #fff; color: #000; border: 1px solid #666; border-left-width: 4px; border-radius: 0; }
 .letter { margin: 0; }
 .letter + .letter { padding-top: 0; border-top: 0; break-before: page; page-break-before: always; }
 
-.table-wrap { overflow: visible; background: none; border: 0; box-shadow: none; }
-.table, .md-table, .prose table { width: 100%; border-collapse: collapse; font-size: 10pt; }
-.table th, .table td, .md-table th, .md-table td { color: #000; background: #fff; border: 1px solid #999; padding: 4pt 6pt; }
-.table th, .md-table th { background: #eee; letter-spacing: 0; text-transform: none; white-space: normal; }
+.table-wrap, .prose .table-wrap { overflow: visible; background: none; border: 0; box-shadow: none; }
+.table, .md-table, .prose table, .model-table { width: 100%; border-collapse: collapse; font-size: 10pt; }
+.table th, .table td, .md-table th, .md-table td, .prose table th, .prose table td, .model-table th, .model-table td { color: #000; background: #fff; border: 1px solid #999; padding: 4pt 6pt; }
+.table th, .md-table th, .model-table th { background: #eee; letter-spacing: 0; text-transform: none; white-space: normal; }
 .table tr.row-warn td, .table tr.row-danger td, .table tr.row-muted td { background: #fff; box-shadow: none; color: #000; }
 thead { display: table-header-group; }
 tr, td, th { break-inside: avoid; page-break-inside: avoid; }
 
-.badge { color: #000; background: none; border: 1px solid #666; }
+.badge { color: #000; background: none; border: 1px solid #666; border-radius: 999px; }
 .progress { display: none; }
 .sort::after { content: none; }
 .secret { border: 1px solid #666; }

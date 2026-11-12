@@ -8,9 +8,17 @@ PaidOnTime turns the v0.9 Notion kit into a working app on the shared core. It i
 - **Credit control**: customers with credit limits, risk, credit check, account stops, customer statements, disputes, promises and payment plans.
 - **Credit policy builder**: an internal credit policy, customer payment terms and invoice wording, written from a few answers.
 - **Guides**: Start here, the Credit Control SOP (filled in with the workspace's names and timings), How the numbers work, and a monthly review report.
-- **Public pages**: a landing page, pricing, a free interest calculator (lead magnet) and a **waitlist** for the demand test.
+- **Public pages**: a landing page, pricing, a free interest calculator (lead magnet), free template pages (`/free/payment-reminder-templates`, `/free/letter-before-action`, `/free/payment-terms`) and a **waitlist** for the demand test.
+- **Founder console** (`/app/founder`, for the emails in `FOUNDER_EMAILS`): live numbers (sign-ups, trials, trial → paid, activation, revenue, waitlist answers, calculator uses), the launch checklist, the business plan, the marketing plan, a path-to-£1m model and the leads with CSV export. The plans live in `founder/*.md`.
+- **Growth loop**: reminder emails on trial and Core end with "Sent with PaidOnTime" (Complete removes it; it can be switched off in Settings).
+- **Work through the list**: one button on the chase list opens each due reminder in turn; send, and the next one opens. Skipping defers an invoice to tomorrow.
+- **Onboarding checklist** on the dashboard until the six setup steps are done.
 
 General information based on UK government guidance, not legal advice. Nothing goes live before Founder Launch Approval.
+
+## Deploying for under £10 a month
+
+See `docs/LAUNCH.md`: a Dockerfile and `fly.toml` are included, tests run in GitHub Actions on every push, and `.env.example` lists every setting.
 
 ## Run it
 
@@ -64,8 +72,13 @@ Disputes, broken promises, payment plans and follow-up dates from the chase log 
 - `definition.js`: plans, settings, navigation, routes, landing page copy, sample data and the Monday job.
 - `resources.js`: customers, invoices, payments, chase log, templates and reference rates, with computed figures and hooks.
 - `lib/`: `calc.js` (figures), `rates.js` (Bank Rate history), `ladder.js` (next actions), `templates.js`, `docs.js` (guides and policy), `sample.js`.
-- `pages/`: `app.js` (dashboard, chase list and board, calendar feed, compose and send, letters, statements, reports) and `guides.js` (guides, policy, calculator, waitlist).
-- `test/`: `calc.test.js` (the GOV.UK example, the v0.9 QA-TEST rows, band edges, rates, part payments, ladder) and `flow.test.js` (end to end over HTTP).
+- `pages/`: `app.js` (dashboard and onboarding, chase list, board, work-through mode, calendar feed, compose and send, letters, statements, reports), `guides.js` (guides, policy, calculator, waitlist), `free.js` (free template pages) and `founder.js` (the founder console).
+- `founder/`: the business plan and marketing plan (Markdown, rendered in the console).
+- `test/`: `calc.test.js` (the GOV.UK example, the v0.9 QA-TEST rows, band edges, rates, part payments, ladder), `flow.test.js` (end to end over HTTP) and `founder.test.js` (console, free pages, onboarding, work-through mode, email footer).
+
+## The law is changing
+
+The Commercial Payments Bill (introduced May 2026, Royal Assent expected 2027) would make statutory interest mandatory and non-excludable, cap payment terms at 60 days and add a penalty for late invoice disputes. The note in `lib/docs.js` (`BILL_NOTE`) is shown on the calculator and in the numbers guide; update it when the Bill commences.
 
 ## Before launch (founder decisions and checks)
 

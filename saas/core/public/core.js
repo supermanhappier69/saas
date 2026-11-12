@@ -220,4 +220,32 @@
       announce('Copy failed. The text is selected so you can copy it yourself.');
     }
   }
+
+  /* Contents lists (.plan-toc) mark the section being read with aria-current, which the stylesheet highlights */
+  const tocLinks = Array.from(doc.querySelectorAll('.plan-toc a[href^="#"]'));
+  if (tocLinks.length && 'IntersectionObserver' in window) {
+    const targets = tocLinks.map((link) => {
+      try {
+        return doc.getElementById(decodeURIComponent(link.getAttribute('href').slice(1)));
+      } catch (error) {
+        return null;
+      }
+    });
+    const inView = new Set();
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) inView.add(entry.target);
+        else inView.delete(entry.target);
+      });
+      const first = targets.findIndex((target) => target && inView.has(target));
+      if (first < 0) return;
+      tocLinks.forEach((link, index) => {
+        if (index === first) link.setAttribute('aria-current', 'true');
+        else link.removeAttribute('aria-current');
+      });
+    }, { rootMargin: '-90px 0px -65% 0px' });
+    targets.forEach((target) => {
+      if (target) observer.observe(target);
+    });
+  }
 })();

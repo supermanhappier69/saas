@@ -1,5 +1,5 @@
 // Signed-in pages: dashboard, chase list and board, calendar feed, compose and send, letters, statements and reports.
-import { HttpError, addDays, daysBetween, fmtDateUK, fmtGBP, isEmail, mdToHtml, renderMerge, round2, todayISO, randomToken } from '../../../core/util.js';
+import { HttpError, addDays, daysBetween, fmtDateUK, fmtGBP, isEmail, mdToHtml, nowISO, renderMerge, round2, todayISO, randomToken } from '../../../core/util.js';
 import { html, raw, card, stats, pageHeader, button, postButton, table, badge, alert, tabs, barChart, csrfField, attrs, emptyState } from '../../../core/ui.js';
 import { appPage, printPage } from '../../../core/layout.js';
 import { requireRole, can } from '../../../core/crud.js';
@@ -38,6 +38,27 @@ function actionItem(ctx, i, { showDate = false } = {}) {
 const actionList = (ctx, list, opts) => (list.length ? html`<ul class="action-list">${list.map((i) => actionItem(ctx, i, opts))}</ul>` : html`<p class="muted">Nothing to do here.</p>`);
 const byWhen = (a, b) => (a.next.on < b.next.on ? -1 : a.next.on > b.next.on ? 1 : (b.next.stage ?? -1) - (a.next.stage ?? -1));
 
+/** Setup steps for a new workspace, shown on the dashboard until every one is done. */
+export function onboarding(ctx) {
+  const { db, resources } = ctx.services;
+  const s = ctx.org.settings || {};
+  const org = ctx.org.id;
+  const n = (sql) => db.get(sql, org).n;
+  const steps = [
+    { id: 'details', title: 'Add your business details', text: 'Your name, phone and bank details go into every reminder.', done: Boolean(s.company_name && s.bank_details), href: '/app/settings', cta: 'Open Settings' },
+    { id: 'customer', title: 'Add your first customer', text: 'Legal name, accounts contact, payment terms and a credit limit.', done: n('SELECT COUNT(*) AS n FROM r_customers WHERE org_id = ? AND is_sample = 0') > 0, href: '/app/customers/new', cta: 'Add a customer' },
+    { id: 'invoice', title: 'Add your unpaid invoices', text: 'Type them in or import a CSV from your accounting software.', done: n('SELECT COUNT(*) AS n FROM r_invoices WHERE org_id = ? AND is_sample = 0') > 0, href: '/app/invoices/new', cta: 'Add an invoice', alt: { href: '/app/invoices/import', label: 'Import CSV' } },
+    { id: 'reminder', title: 'Send your first reminder', text: 'Open the chase list, check the wording and send. It is logged for you.', done: n('SELECT COUNT(*) AS n FROM r_chases WHERE org_id = ? AND is_sample = 0') > 0, href: '/app/chase', cta: 'Open the chase list' },
+    { id: 'calendar', title: 'Put the chase list in your calendar', text: 'Subscribe once and every next action appears on the right day.', done: Boolean(db.kvGet(`onboard:${org}:calendar`)), href: '/app/chase/calendar', cta: 'Get the link' },
+    { id: 'samples', title: 'Remove the sample data', text: 'Once your own invoices are in, clear the fictional SAMPLE records.', done: resources.sampleCount(org) === 0, href: '/app/settings', cta: 'Open Settings' },
+  ];
+  const done = steps.filter((x) => x.done).length;
+  if (done === steps.length || ctx.org.is_demo) return '';
+  return html`<section class="onboarding card"><div class="card-head"><h2>Set up in 15 minutes</h2><div class="card-actions"><span class="muted small">${done} of ${steps.length} done</span></div></div><div class="card-body"><ol class="onboard-list">${steps.map((x, i) => html`<li${attrs({ class: x.done ? 'onboard-step done' : 'onboard-step' })}><span class="onboard-num" aria-hidden="true">${x.done ? '✓' : i + 1}</span><div class="onboard-text"><strong>${x.title}</strong><span class="muted small">${x.text}</span></div>${
+    x.done ? '' : html`<div class="page-actions">${button(x.cta, { href: x.href, size: 'sm', variant: 'primary' })}${x.alt ? button(x.alt.label, { href: x.alt.href, size: 'sm' }) : ''}</div>`
+  }</li>`)}</ol></div></section>`;
+}
+
 export function dashboard(ctx) {
   const b = base(ctx);
   const all = allInvoices(ctx);
@@ -59,7 +80,7 @@ export function dashboard(ctx) {
     return appPage(ctx, {
       title: 'Dashboard',
       active: 'dashboard',
-      body: html`${head}${card({ body: emptyState({ title: 'Add your unpaid invoices to get started', text: 'Add a customer and their invoices, or import a CSV from your accounting software. PaidOnTime then tells you what to send next and what you can claim.', action: html`${button('Add a customer', { href: '/app/customers/new', variant: 'primary' })} ${button('Import invoices', { href: '/app/invoices/import' })} ${button('Read Start here', { href: '/app/guides' })}` }) })}`,
+      body: html`${head}${onboarding(ctx)}${card({ body: emptyState({ title: 'Add your unpaid invoices to get started', text: 'Add a customer and their invoices, or import a CSV from your accounting software. PaidOnTime then tells you what to send next and what you can claim.', action: html`${button('Add a customer', { href: '/app/customers/new', variant: 'primary' })} ${button('Import invoices', { href: '/app/invoices/import' })} ${button('Read Start here', { href: '/app/guides' })}` }) })}`,
     });
   }
   const buckets = [
@@ -72,7 +93,7 @@ export function dashboard(ctx) {
   ].map((x) => ({ ...x, value: sum(open.filter(x.test)) }));
   const { resources } = ctx.services;
   const watch = resources.query(ctx, resources.get('customers'), { view: 'watch', all: true }).rows.slice(0, 5);
-  const body = html`${head}${stats([
+  const body = html`${head}${onboarding(ctx)}${stats([
     { label: 'Outstanding', value: gbp(sum(open)), hint: `${open.length} unpaid invoice${open.length === 1 ? '' : 's'}`, href: '/app/invoices', tone: 'blue' },
     { label: 'Overdue', value: gbp(sum(overdue)), hint: `${overdue.length} invoice${overdue.length === 1 ? '' : 's'}`, href: '/app/invoices?view=overdue', tone: overdue.length ? 'orange' : 'green' },
     { label: 'To chase now', value: String(now.length), hint: 'actions due today or earlier', href: '/app/chase', tone: now.length ? 'red' : 'green' },
@@ -114,8 +135,19 @@ export function chaseList(ctx) {
   }
   const later = open.filter((i) => i.next.on > addDays(t, 13));
   if (later.length) groups.push({ title: 'Later', list: later, showDate: true });
-  const body = html`${pageHeader({ title: 'Chase list', subtitle: 'Every unpaid invoice\'s next action, in date order. Work through it on Monday and chase broken promises on Friday.' })}${chaseTabs('list')}${groups.map((g) => html`<section class="agenda-day"><h2 class="agenda-date">${g.title} <span class="count">${g.list.length}</span></h2>${actionList(ctx, g.list, { showDate: g.showDate })}</section>`)}`;
+  const emailsDue = open.filter((i) => i.next.now && i.next.template && i.next.template !== '5').length;
+  const actions = can(ctx, 'member') && emailsDue ? [button(`Send the ${emailsDue} due reminder${emailsDue === 1 ? '' : 's'} one by one`, { href: '/app/chase/next', variant: 'primary', size: 'sm' })] : [];
+  const body = html`${pageHeader({ title: 'Chase list', subtitle: 'Every unpaid invoice\'s next action, in date order. Work through it on Monday and chase broken promises on Friday.', actions })}${chaseTabs('list')}${groups.map((g) => html`<section class="agenda-day"><h2 class="agenda-date">${g.title} <span class="count">${g.list.length}</span></h2>${actionList(ctx, g.list, { showDate: g.showDate })}</section>`)}`;
   return appPage(ctx, { title: 'Chase list', active: 'chase', body: html`<div class="agenda">${body}</div>` });
+}
+
+/** "Work through the list": opens the next due email reminder; after each send it comes back here. */
+export function chaseNext(ctx) {
+  requireRole(ctx, 'member');
+  const queue = allInvoices(ctx).filter((i) => live(i) && i.next.now && i.next.template && i.next.template !== '5').sort(byWhen);
+  if (!queue.length) return { redirect: '/app/chase', flash: 'All caught up: no email reminders are due right now.' };
+  const [first] = queue;
+  return { redirect: `/app/invoices/${first.id}/compose?t=${first.next.template}&queue=${queue.length}` };
 }
 
 export function chaseBoard(ctx) {
@@ -135,7 +167,8 @@ export function chaseBoard(ctx) {
 }
 
 export function calendarPage(ctx) {
-  const { config } = ctx.services;
+  const { config, db } = ctx.services;
+  db.kvSet(`onboard:${ctx.org.id}:calendar`, nowISO());
   const url = `${config.BASE_URL}/feed/${ctx.org.feed_token}.ics`;
   const body = html`${pageHeader({ title: 'Chase list', subtitle: 'See every chase action in Google Calendar, Outlook or Apple Calendar.' })}${chaseTabs('calendar')}${card({
     title: 'Your chase calendar link',
@@ -309,15 +342,37 @@ export function composePage(ctx, { values = null, error = null } = {}) {
     planForm = html`<form method="get" action="/app/invoices/${inv.id}/compose" class="inline-fields"><input type="hidden" name="t" value="plan"><label for="plan-n">Instalments</label><input id="plan-n" name="n" type="number" min="1" max="24" value="${m.plan.n}"><label for="plan-first">First payment</label><input id="plan-first" name="first" type="date" value="${m.plan.first}">${button('Work out instalments', { size: 'sm' })}</form>`;
   }
   const to = values?.to ?? customer?.accounts_email ?? '';
+  const queue = Number(values?.queue ?? ctx.query.queue) || 0;
+  const queueNote = queue ? alert(html`Working through the list: this is the first of <strong>${queue}</strong> due reminder${queue === 1 ? '' : 's'}. After you send it the next one opens. <a href="/app/chase">Stop and go back to the list</a>.`, 'blue') : '';
+  const footerNote = isEmailTpl && emailFooter(ctx) ? html`<p class="help">Emails end with “${emailFooter(ctx)}”. The Complete plan removes it, or turn it off in Settings.</p>` : '';
   const form = tpl.channel === 'Phone script'
     ? html`<div class="prose">${raw(mdToHtml(text))}</div><div class="form-actions">${button('Log the call', { href: `/app/chases/new?invoice=${inv.id}&channel=Phone&stage=${encodeURIComponent(tpl.stage || '')}`, variant: 'primary' })}</div>`
-    : html`<form method="post" action="/app/invoices/${inv.id}/compose" class="form compose">${csrfField(ctx)}<input type="hidden" name="t" value="${code}">${error ? alert(error, 'red') : ''}<div class="form-grid">${
+    : html`<form method="post" action="/app/invoices/${inv.id}/compose" class="form compose">${csrfField(ctx)}<input type="hidden" name="t" value="${code}"><input type="hidden" name="queue" value="${queue || ''}">${error ? alert(error, 'red') : ''}<div class="form-grid">${
       isEmailTpl ? html`<div class="field"><label for="c-to">To</label><input id="c-to" name="to" type="email" value="${to}" required></div><div class="field"><label for="c-cc">Cc (optional)</label><input id="c-cc" name="cc" type="email" value="${values?.cc || ''}"></div>` : ''
-    }<div class="field field-wide"><label for="c-subject">${isEmailTpl ? 'Subject' : 'Heading'}</label><input id="c-subject" name="subject" value="${subject}" required maxlength="300"></div><div class="field field-wide"><label for="c-body">Wording</label><textarea id="c-body" name="body" rows="20" required>${text}</textarea><p class="help">Edit anything before you send. Changes here don't alter the template.</p></div></div><div class="form-actions">${
-      isEmailTpl ? button('Send email and log it', { variant: 'primary', name: 'send', value: '1' }) : ''
-    }${button(isEmailTpl ? 'Print as a letter' : 'Open letter to print', { variant: isEmailTpl ? 'secondary' : 'primary', extra: { formaction: `/app/invoices/${inv.id}/letter` } })}${button('Copy wording', { type: 'button', extra: { 'data-copy-target': '#c-body' } })}${button('Cancel', { href: `/app/invoices/${inv.id}`, variant: 'ghost' })}</div></form>`;
-  const body = html`${head}${picker}${warnings(ctx, data, tpl, `${subject}\n${text}`)}<div class="detail-grid"><div class="detail-main">${planForm ? card({ title: 'Instalments', body: planForm }) : ''}${card({ body: form })}</div><aside class="detail-side">${figuresCard(inv)}${card({ title: 'Merge fields', body: html`<p class="small muted">Use these in your templates:</p><p class="merge-fields">${MERGE_FIELDS.map((f) => html`<code>[${f}]</code> `)}</p>` })}</aside></div>`;
+    }<div class="field field-wide"><label for="c-subject">${isEmailTpl ? 'Subject' : 'Heading'}</label><input id="c-subject" name="subject" value="${subject}" required maxlength="300"></div><div class="field field-wide"><label for="c-body">Wording</label><textarea id="c-body" name="body" rows="20" required>${text}</textarea><p class="help">Edit anything before you send. Changes here don't alter the template.</p>${footerNote}</div></div><div class="form-actions">${
+      isEmailTpl ? button(queue ? 'Send, log it and open the next' : 'Send email and log it', { variant: 'primary', name: 'send', value: '1' }) : ''
+    }${button(isEmailTpl ? 'Print as a letter' : 'Open letter to print', { variant: isEmailTpl ? 'secondary' : 'primary', extra: { formaction: `/app/invoices/${inv.id}/letter` } })}${button('Copy wording', { type: 'button', extra: { 'data-copy-target': '#c-body' } })}${
+      queue ? button('Skip this one', { href: `/app/chase/skip/${inv.id}`, variant: 'ghost' }) : button('Cancel', { href: `/app/invoices/${inv.id}`, variant: 'ghost' })
+    }</div></form>`;
+  const body = html`${head}${picker}${queueNote}${warnings(ctx, data, tpl, `${subject}\n${text}`)}<div class="detail-grid"><div class="detail-main">${planForm ? card({ title: 'Instalments', body: planForm }) : ''}${card({ body: form })}</div><aside class="detail-side">${figuresCard(inv)}${card({ title: 'Merge fields', body: html`<p class="small muted">Use these in your templates:</p><p class="merge-fields">${MERGE_FIELDS.map((f) => html`<code>[${f}]</code> `)}</p>` })}</aside></div>`;
   return appPage(ctx, { title: `${tpl.name}: ${inv.number}`, active: 'invoices', body });
+}
+
+/** The growth-loop footer on reminder emails: on by default for trial and Core, removed by Complete, and switchable in Settings. */
+export function emailFooter(ctx) {
+  const s = ctx.org.settings || {};
+  if (s.email_footer === false || isComplete(ctx)) return '';
+  return `Sent with ${ctx.definition.name}, credit control for UK small businesses: ${ctx.services.config.BASE_URL}`;
+}
+
+/** Skipping in "work through the list" mode pushes that invoice's action to tomorrow by logging a follow-up date. */
+export function chaseSkip(ctx) {
+  requireRole(ctx, 'member');
+  const { resources } = ctx.services;
+  const inv = resources.find(ctx, resources.get('invoices'), ctx.params.id);
+  const t = base(ctx).today;
+  logContact(ctx, inv, { channel: 'Other', outcome: 'Other', next_follow_up: addDays(t, 1), notes: 'Skipped while working through the chase list.' });
+  return { redirect: '/app/chase/next' };
 }
 
 function logContact(ctx, inv, values) {
@@ -332,24 +387,26 @@ export async function composeSend(ctx) {
   const code = String(ctx.body.t || '');
   const tpl = requireFound(templateFor(ctx, code), 'Template');
   if (tpl.complete_only && !isComplete(ctx)) throw new HttpError(402, `The “${tpl.name}” template is part of the Complete plan.`);
-  const v = { t: code, to: String(ctx.body.to || '').trim().toLowerCase(), cc: String(ctx.body.cc || '').trim().toLowerCase(), subject: String(ctx.body.subject || '').trim().slice(0, 300), body: String(ctx.body.body || '').replace(/\r\n?/g, '\n').trim() };
+  const v = { t: code, queue: Number(ctx.body.queue) || 0, to: String(ctx.body.to || '').trim().toLowerCase(), cc: String(ctx.body.cc || '').trim().toLowerCase(), subject: String(ctx.body.subject || '').trim().slice(0, 300), body: String(ctx.body.body || '').replace(/\r\n?/g, '\n').trim() };
   let error = null;
   if (!isEmail(v.to)) error = 'Enter the email address to send to.';
   else if (v.cc && !isEmail(v.cc)) error = 'The Cc address isn\'t valid.';
   else if (!v.subject || !v.body) error = 'Add a subject and some wording.';
   if (error) return { status: 422, html: composePage(ctx, { values: v, error }) };
   const s = ctx.org.settings || {};
-  const sent = await ctx.services.mailer.send({ orgId: ctx.org.id, to: v.to, cc: v.cc || null, replyTo: s.reply_to || ctx.user.email, subject: v.subject, text: v.body, related: 'chase' });
+  const footer = emailFooter(ctx);
+  const sent = await ctx.services.mailer.send({ orgId: ctx.org.id, to: v.to, cc: v.cc || null, replyTo: s.reply_to || ctx.user.email, subject: v.subject, text: footer ? `${v.body}\n\n--\n${footer}` : v.body, related: 'chase' });
   const t = base(ctx).today;
   logContact(ctx, inv, {
     channel: 'Email', stage: tpl.stage || null, outcome: 'Sent', contact: v.to, template: code, outbox_id: sent.id ?? null,
     next_follow_up: addDays(t, 7), notes: `Subject: ${v.subject}`,
   });
+  const back = v.queue ? '/app/chase/next' : `/app/invoices/${inv.id}`;
   let flash = 'Email sent and logged in the chase log.';
   if (sent.demo) flash = 'Demo workspace: the email was logged but not sent.';
   else if (sent.status === 'logged') flash = 'Email saved and logged. Email sending isn\'t set up yet, so it\'s in Activity → Emails rather than sent.';
   else if (sent.status === 'failed') return { redirect: `/app/invoices/${inv.id}`, flash: { text: 'The email could not be sent. It is logged; check Activity → Emails for the reason.', tone: 'red' } };
-  return { redirect: `/app/invoices/${inv.id}`, flash };
+  return { redirect: back, flash };
 }
 
 function letterPage(ctx, data, tpl, subject, text) {

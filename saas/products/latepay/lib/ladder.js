@@ -106,7 +106,12 @@ export function nextAction(inv, fig, log, { today, L }) {
   });
 
   if (rec === null && last === null) return make(0, stageStart(0, inv.due_date, L), { kind: 'scheduled' });
-  if (rec !== null && (last === null || rec > last)) return make(rec, stageStart(rec, inv.due_date, L));
+  if (rec !== null && (last === null || rec > last)) {
+    // A follow-up date set in the future ("remind me tomorrow") defers the stage until then.
+    const on = stageStart(rec, inv.due_date, L);
+    const fu = followUp(log);
+    return make(rec, fu && fu > today && fu > on ? fu : on);
+  }
   // This stage has been done: either follow up on the contact or move up the ladder when the next stage starts.
   const fu = followUp(log);
   if (last >= 5) {
