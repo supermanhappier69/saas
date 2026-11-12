@@ -14,6 +14,7 @@ import { freePage, freeTermsPage } from './pages/free.js';
 import { registerFounder, isFounder } from './pages/founder.js';
 import { landingBody } from './pages/landing.js';
 import { registerSearch } from '../../core/search.js';
+import { trialEmails } from './lifecycle.js';
 
 const resources = buildResources();
 const R = Object.fromEntries(resources.map((r) => [r.name, r]));
@@ -38,6 +39,7 @@ const SETTINGS_FIELDS = [
   { key: 'stage3_from', label: 'Stage 3, final notice', type: 'int', min: 3, max: 365, required: true, group: 'Chase ladder (days overdue each stage starts)' },
   { key: 'stage4_from', label: 'Stage 4, interest and compensation claim', type: 'int', min: 4, max: 365, required: true, group: 'Chase ladder (days overdue each stage starts)' },
   { key: 'stage5_from', label: 'Stage 5, letter before action', type: 'int', min: 5, max: 400, required: true, group: 'Chase ladder (days overdue each stage starts)' },
+  { key: 'trial_emails', label: 'During the free trial, email owners and admins a few reminders (getting started, a summary of what you’re owed, and when the trial ends)', type: 'bool', group: 'Emails from PaidOnTime' },
 ];
 
 // The mark: a clock face whose hands form a tick. Colours come from the theme via the logo-* classes.
@@ -54,7 +56,7 @@ export const definition = {
   description: 'A chase calendar, ready-to-send reminders and letters, and the statutory interest and compensation UK law lets you claim, worked out for every late invoice.',
   port: 3101,
   publicDir: new URL('./public/', import.meta.url),
-  theme: { css: 'theme.css', color: '#0f5f4a', favicon: 'favicon.svg' },
+  theme: { css: 'theme.css', color: '#0f5f4a', favicon: 'favicon.svg', ogImage: 'og.png' },
   trialDays: 14,
   trialPlan: 'complete',
   demoOrgName: 'Demo Joinery & Fit-out Ltd',
@@ -72,7 +74,7 @@ export const definition = {
       flags: { complete: true },
     },
   ],
-  defaultSettings: { default_terms: 30, stop_days: 30, weekly_digest: true, email_footer: true, ...DEFAULT_LADDER },
+  defaultSettings: { default_terms: 30, stop_days: 30, weekly_digest: true, email_footer: true, trial_emails: true, ...DEFAULT_LADDER },
   settingsFields: SETTINGS_FIELDS,
   // The ladder silently reorders out-of-order stages, so refuse them instead of saving numbers that aren't used.
   validateSettings(values) {
@@ -106,6 +108,34 @@ export const definition = {
     nav: [{ label: 'How it works', href: '/#how' }, { label: 'Pricing', href: '/pricing' }, { label: 'Free calculator', href: '/calculator' }, { label: 'Free templates', href: '/free/payment-reminder-templates' }, { label: 'Demo', href: '/demo' }],
     landing: (ctx) => landingBody(ctx),
     featuredLabel: 'Recommended',
+    sitemap: ['/calculator', '/free/payment-reminder-templates', '/free/letter-before-action', '/free/payment-terms'],
+    signupAside: {
+      title: 'What you get in the trial',
+      points: [
+        '14 days of Complete: every template, the interest claim and the letter before action',
+        'Sample invoices at every stage to try it on, removed in one click',
+        'Import your unpaid invoices from a CSV, or add them by hand',
+        'No card needed, so nothing is charged when the trial ends',
+      ],
+      note: 'Keep it for £49 or £99, once. No subscription. Prices exclude VAT.',
+    },
+    planTable: {
+      title: 'Compare the plans',
+      rows: [
+        ['Customers, invoices, payments and chase log', true, true],
+        ['Chase calendar, board, calendar feed and Monday email', true, true],
+        ['Statutory interest and compensation worked out', true, true],
+        ['Templates 0–3 and the phone script', true, true],
+        ['Credit control SOP and guides', true, true],
+        ['Interest and compensation claim (template 4)', false, true],
+        ['Letter before action (template 5)', false, true],
+        ['Customer statements and payment plans', false, true],
+        ['Payment terms and credit policy builder', false, true],
+        ['Monthly review report', false, true],
+        ['People in the workspace', 'Up to 2', 'Up to 5'],
+        ['Price, one-off', '£49', '£99'],
+      ],
+    },
     pricingHeadline: 'Pay once. Chase for good.',
     metaDescription: 'Credit control for UK small businesses: a chase calendar, ready-to-send reminders and letters, and statutory late payment interest and compensation worked out. One price, no subscription.',
     footer: [
@@ -120,6 +150,9 @@ export const definition = {
       { q: 'Do I need to connect my accounting software?', a: 'No. Add invoices by hand or import a CSV export. There is nothing to integrate.' },
       { q: 'Which Bank of England rate does it use?', a: 'The rate in force on 30 June or 31 December before interest starts, as the 2002 Order requires. Published rates are built in; if a debt needs a rate that isn\'t published yet, the app tells you which date to look up.' },
       { q: 'Is this legal advice?', a: 'No. The templates and guides are general information based on official UK guidance. Have a solicitor check the interest claim, the letter before action and your payment terms before you first use them.' },
+      { q: 'What happens when the trial ends?', a: 'Nothing is charged: we never ask for a card during the trial. Your workspace becomes read-only, so your customers, invoices and chase log stay safe and you can still export them. Choose Core or Complete whenever you are ready to carry on.' },
+      { q: 'Can my bookkeeper or a colleague use it?', a: 'Yes. Invite them from Team: Core includes 2 people and Complete 5, each with their own login and role. A bookkeeper who chases for several clients can be invited to each client\'s workspace and switch between them.' },
+      { q: 'Is my data safe, and can I take it with me?', a: 'Your data is only used to provide and support the service. You can export everything at any time from Settings, as CSV files or one JSON file. If you delete your workspace, we delete your data within 30 days.' },
       { q: 'What does it cost?', a: 'A one-off £49 for Core or £99 for Complete, after a 14-day free trial of everything. No monthly subscription.' },
     ],
     pricingIntro: 'One payment, no subscription. Start with a 14-day free trial of the Complete plan.',
@@ -170,8 +203,14 @@ export const definition = {
   },
   dashboard,
   jobs: {
-    /** Monday morning: email the week's chase list to the workspace's owners and admins. */
+    /** Each day: the trial email that's due (if any), then the Monday chase list. */
     async daily(services, org, date) {
+      const trial = await trialEmails(services, org, date);
+      const digest = await definition.jobs.digest(services, org, date);
+      return trial ? { ...digest, trial } : digest;
+    },
+    /** Monday morning: email the week's chase list to the workspace's owners and admins. */
+    async digest(services, org, date) {
       if (org.is_demo || org.settings?.weekly_digest === false) return { skipped: 'off' };
       if (new Date(`${date}T12:00:00Z`).getUTCDay() !== 1) return { skipped: 'not Monday' };
       const ctx = { org, services, user: null, cache: {}, role: 'viewer' };

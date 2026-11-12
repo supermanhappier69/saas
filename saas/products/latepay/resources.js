@@ -3,7 +3,7 @@
 import { HttpError, addDays, round2, todayISO, fmtGBP } from '../../core/util.js';
 import { html, badge } from '../../core/ui.js';
 import { invoiceFigures, rateCheck, fmtShort } from './lib/calc.js';
-import { nextAction, ladderFrom, LOG_STAGE_OPTIONS, STAGE_OPTIONS, stageForDays, stageLabel, whenLabel } from './lib/ladder.js';
+import { nextAction, ladderFrom, LOG_STAGE_OPTIONS, STAGE_OPTIONS, SKIPPED, isContact, stageForDays, stageLabel, whenLabel } from './lib/ladder.js';
 import { DEFAULT_TEMPLATES, defaultTemplate } from './lib/templates.js';
 
 export const CUSTOMER_TYPES = ['Limited company / LLP', 'Sole trader', 'Partnership', 'Public sector body', 'Charity or other organisation', 'Consumer (not a business)'];
@@ -11,7 +11,7 @@ export const CONSUMER = 'Consumer (not a business)';
 export const INVOICE_STATUSES = ['Open', 'Disputed', 'On payment plan', 'Paid', 'Written off'];
 const STATUS_TONES = { Open: 'blue', Disputed: 'orange', 'On payment plan': 'purple', Paid: 'green', 'Written off': 'gray' };
 const CHANNELS = ['Email', 'Phone', 'Letter', 'In person', 'Text message', 'Other'];
-const OUTCOMES = ['Sent', 'No response', 'Promise to pay', 'Paid', 'Dispute raised', 'Payment plan agreed', 'Wrong contact', 'Other'];
+const OUTCOMES = ['Sent', 'No response', 'Promise to pay', 'Paid', 'Dispute raised', 'Payment plan agreed', 'Wrong contact', 'Other', SKIPPED];
 const today = (ctx) => todayISO(ctx.services.config?.TIMEZONE);
 const isSettled = (row) => row.balance <= 0 || row.status === 'Paid';
 const isLive = (row) => !isSettled(row) && row.status !== 'Written off';
@@ -65,6 +65,7 @@ function computeInvoice(row, ctx) {
     paidDate: row.paid_date, claim, rateOverride: row.rate_override, workspaceRates: b.rates,
   });
   const log = b.chases.get(row.id) || [];
+  const contacts = log.filter(isContact);
   const next = nextAction({ ...row, customer_type: customer?.customer_type }, fig, log, { today: b.today, L: b.L });
   const rec = fig.settled ? null : stageForDays(fig.daysOverdue, fig.daysToDue, b.L);
   return {
