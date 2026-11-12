@@ -1,10 +1,11 @@
 // Billing and activity pages: plans, usage, Stripe checkout and portal, test billing, webhooks, the audit log and sent emails.
-import { HttpError, fmtDateUK } from './util.js';
+import { HttpError, fmtDateUK, fmtGBP } from './util.js';
 import { html, postButton, pageHeader, card, table, alert, badge, tabs, pagination, urlWith, progress } from './ui.js';
 import { appPage } from './layout.js';
 import { requireRole, can, fmtWhen } from './crud.js';
 
 const priceText = (p) => (typeof p.price === 'number' ? (p.price ? `£${p.price}` : 'Free') : p.price || '');
+const poundsText = (n) => (Number.isInteger(n) ? `£${n}` : fmtGBP(n));
 const PAGE_SIZE = 50;
 const EMAIL_STATUS = {
   sent: ['Sent', 'green'],
@@ -34,6 +35,11 @@ function usageCard(ctx) {
   return card({ title: plan ? `Usage on the ${plan.name} plan` : 'Usage', body: html`<ul class="usage">${items.map(row)}</ul><p class="help">Sample records don't count towards limits.</p>` });
 }
 
+function upgradeNote(ctx, p) {
+  const up = ctx.org.is_demo ? null : ctx.services.billing.upgrade(ctx.org, p.id);
+  return up ? html`<p class="plan-upgrade small">You have already paid ${poundsText(up.from.price)} for ${up.from.name}, so upgrading costs just the ${poundsText(up.amount)} difference.</p>` : '';
+}
+
 function planAction(ctx, p) {
   const { billing, config } = ctx.services;
   const org = ctx.org;
@@ -44,8 +50,11 @@ function planAction(ctx, p) {
   if (p.oneOff && paidFor?.oneOff && (paidFor.price || 0) >= (p.price || 0)) return badge('Included', 'gray');
   if (!can(ctx, 'owner')) return html`<p class="muted small">Only the workspace owner can change plans.</p>`;
   if (!p.price) return '';
-  if (billing.enabled && billing.priceId(p)) return postButton(ctx, '/app/billing/checkout', `Choose ${p.name}`, { variant: 'primary', fields: { plan: p.id } });
-  if (config.ALLOW_FAKE_BILLING) return postButton(ctx, '/app/billing/simulate', `Activate ${p.name} (test mode)`, { fields: { plan: p.id } });
+  // A workspace that has paid for Core upgrades to Complete by paying the difference, not the full price again.
+  const up = billing.upgrade(org, p.id);
+  const upLabel = up ? `Upgrade for ${poundsText(up.amount)}` : '';
+  if (billing.enabled && billing.priceId(p)) return postButton(ctx, '/app/billing/checkout', up ? upLabel : `Choose ${p.name}`, { variant: 'primary', fields: { plan: p.id } });
+  if (config.ALLOW_FAKE_BILLING) return postButton(ctx, '/app/billing/simulate', up ? `${upLabel} (test mode)` : `Activate ${p.name} (test mode)`, { fields: { plan: p.id } });
   return html`<p class="muted small">Online payment isn't switched on yet. <a href="/contact">Contact us</a> to subscribe.</p>`;
 }
 
@@ -70,7 +79,7 @@ function billingPage(ctx) {
     const isCurrent = org.plan_status === 'active' && org.plan === p.id;
     return html`<div class="${isCurrent ? 'plan plan-current' : 'plan'}"><h3>${p.name}</h3><p class="plan-price"><span class="amount">${priceText(p)}</span>${
       typeof p.price === 'number' && p.price ? html`<span class="per">${p.oneOff ? ' one-off' : ' / month'}</span>` : ''
-    }</p>${p.description ? html`<p class="muted">${p.description}</p>` : ''}${
+    }</p>${p.description ? html`<p class="muted">${p.description}</p>` : ''}${upgradeNote(ctx, p)}${
       p.features?.length ? html`<ul class="ticks">${p.features.map((f) => html`<li>${f}</li>`)}</ul>` : ''
     }<div class="plan-action">${planAction(ctx, p)}</div></div>`;
   });
