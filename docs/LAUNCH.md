@@ -9,7 +9,7 @@ This is the cheapest sensible setup. Everything is a single small server with a 
 | A domain registrar (e.g. Cloudflare Registrar) | `paidontime.co.uk` or similar | about £10 a year |
 | [Fly.io](https://fly.io) | hosting with a persistent volume | about £3–£5 a month |
 | [Stripe](https://stripe.com) | payments | per transaction only |
-| [Resend](https://resend.com) | sending reminder emails and the Monday digest | free tier (3,000 emails a month) |
+| [Resend](https://resend.com) | sending reminder emails, the Monday digest and the trial emails | free tier (3,000 emails a month) |
 | GitHub | this repository; CI runs the tests on every push | free |
 
 ## 2. Deploy to Fly.io
@@ -32,7 +32,7 @@ fly deploy
 
 Then add your domain (`fly certs add paidontime.co.uk`, point the DNS where it tells you, and change `BASE_URL`).
 
-The daily job (Monday chase-list email, trial clean-up) runs inside the server every 15 minutes, so no cron is needed.
+The daily job (Monday chase-list email, the trial emails, demo clean-up) runs inside the server every 15 minutes, so no cron is needed. Trial emails go to a trialling workspace's owners and admins at four points (getting started on day 2 if nothing has been added, a summary on day 9, three days before the end, and the day after); each workspace can turn them off in Settings.
 
 ## 3. Email
 
@@ -59,7 +59,8 @@ Never set `ALLOW_FAKE_BILLING` in production.
 
 - [ ] Solicitor review of Templates 3–5, the payment plan agreement, the policy's customer-facing terms, and the Terms and Privacy pages (replace the `[placeholders]`).
 - [ ] Decide the refund policy and put it in the terms.
-- [ ] Set `ALLOW_INDEXING=1` so Google can index the public pages (the app pages are always excluded).
+- [ ] Set `ALLOW_INDEXING=1` so Google can index the public pages (the app pages are always excluded). This also publishes `/sitemap.xml` and lists it in `robots.txt`; submit it in Google Search Console.
+- [ ] Make sure `BASE_URL` is the final https address: canonical links, the share image and the sitemap all use it.
 - [ ] Open `/app/founder` as the founder email and work through the launch checklist.
 
 ## 6. Running it

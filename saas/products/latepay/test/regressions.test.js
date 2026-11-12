@@ -209,8 +209,9 @@ test('"work through the list" skips reminders the plan does not include instead 
 
 test('optional wording in brackets is not advised as a merge field to fill in from Settings', async () => {
   const page = text(await owner.get(`/app/invoices/${idOf('INV-1002')}/compose?t=3`));
-  assert.match(page, /Still in brackets: \[and to pause further work on your account\]/);
+  // Listed once, as optional wording: it used to appear again under "Still in brackets".
   assert.match(page, /\[and to pause further work on your account\] is optional wording: keep it or delete it, brackets included/);
+  assert.doesNotMatch(page, /Still in brackets/);
   assert.doesNotMatch(page, /add them in Settings/, 'nothing here can be filled in from Settings');
   // A real merge field with no value still gets the original advice, and is not called optional.
   const preDue = text(await owner.get(`/app/invoices/${idOf('INV-1002')}/compose?t=0`));
