@@ -165,6 +165,7 @@ export function registerWorkspace(router) {
   router.post('/app/settings', (ctx) => {
     requireRole(ctx, 'admin');
     const { values, errors } = cleanSettings(ctx, settingsFields(ctx.definition), ctx.body);
+    for (const [k, msg] of Object.entries(ctx.definition.validateSettings?.(values, ctx) || {})) errors[k] ??= msg;
     const name = String(ctx.body.org_name || '').trim().slice(0, 120);
     if (!name) errors.org_name = 'Enter a workspace name.';
     if (Object.keys(errors).length) return { status: 422, html: settingsPage(ctx, { values: { ...ctx.body }, errors }) };
@@ -174,8 +175,9 @@ export function registerWorkspace(router) {
   });
   router.post('/app/settings/remove-samples', (ctx) => {
     requireRole(ctx, 'admin');
-    const n = ctx.services.resources.removeSamples(ctx);
-    return { redirect: '/app', flash: n ? `Removed ${n} sample record${n === 1 ? '' : 's'}.` : 'There were no sample records to remove.' };
+    const { removed: n, kept } = ctx.services.resources.removeSamples(ctx);
+    const keptNote = kept ? ` Kept ${kept} that your own records use, as normal ${kept === 1 ? 'record' : 'records'}: rename ${kept === 1 ? 'it' : 'them'} or move your records first.` : '';
+    return { redirect: '/app', flash: n || kept ? `Removed ${n} sample record${n === 1 ? '' : 's'}.${keptNote}` : 'There were no sample records to remove.' };
   });
   router.post('/app/settings/api-keys', (ctx) => {
     requireRole(ctx, 'admin');

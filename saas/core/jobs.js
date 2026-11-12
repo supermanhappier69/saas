@@ -29,7 +29,8 @@ export function createJobs(services) {
       const now = new Date().toISOString();
       db.run('DELETE FROM sessions WHERE expires_at < ?', now);
       db.run('DELETE FROM tokens WHERE expires_at < ?', new Date(Date.now() - 30 * 86400000).toISOString());
-      const cutoff = new Date(Date.now() - 2 * 86400000).toISOString();
+      // The demo page promises definition.demoDays (default 2), so honour it rather than a fixed two days.
+      const cutoff = new Date(Date.now() - (definition.demoDays ?? 2) * 86400000).toISOString();
       for (const o of db.all('SELECT id FROM orgs WHERE is_demo = 1 AND created_at < ?', cutoff)) services.deleteOrg?.(o.id);
     } finally {
       running = false;

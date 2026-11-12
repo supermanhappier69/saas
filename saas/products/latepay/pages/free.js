@@ -34,7 +34,7 @@ function templateBlock(t) {
 
 export function freePage(ctx) {
   const def = ctx.definition;
-  const page = PAGES[ctx.params.page];
+  const page = Object.hasOwn(PAGES, ctx.params.page) ? PAGES[ctx.params.page] : null;
   if (!page) return null;
   const items = page.codes.map((c) => DEFAULT_TEMPLATES.find((t) => t.code === c)).filter(Boolean);
   const body = html`<section class="section"><div class="container narrow"><p class="eyebrow">Free templates</p><h1>${page.title}</h1><p class="lead">${page.intro}</p><p class="small muted">Fill in the [square brackets]. ${DISCLAIMER}</p>${items.map(templateBlock)}${page.after || ''}${offerBox(def)}</div></section>`;

@@ -58,9 +58,11 @@ export function allInvoices(ctx) {
 function computeInvoice(row, ctx) {
   const b = base(ctx);
   const customer = b.customers.get(row.customer) || null;
+  // Statutory interest never applies to consumers, even if the customer was switched to Consumer after the invoice was saved.
+  const claim = Boolean(row.claim_interest) && customer?.customer_type !== CONSUMER;
   const fig = invoiceFigures({
     amount: row.amount, dueDate: row.due_date, today: b.today, payments: b.payments.get(row.id) || [], status: row.status,
-    paidDate: row.paid_date, claim: row.claim_interest, rateOverride: row.rate_override, workspaceRates: b.rates,
+    paidDate: row.paid_date, claim, rateOverride: row.rate_override, workspaceRates: b.rates,
   });
   const log = b.chases.get(row.id) || [];
   const next = nextAction({ ...row, customer_type: customer?.customer_type }, fig, log, { today: b.today, L: b.L });
@@ -69,6 +71,7 @@ function computeInvoice(row, ctx) {
     fig,
     next: { ...next, today: b.today },
     customer_type: customer?.customer_type || null,
+    claim_on: claim,
     days_overdue: fig.daysOverdue,
     paid_total: fig.paid,
     balance: fig.balance,
@@ -77,7 +80,7 @@ function computeInvoice(row, ctx) {
     fixed_sum: fig.fixedSum,
     total_due: fig.totalDue,
     ref_rate: fig.reference.rate,
-    rate_check: rateCheck(fig.reference, { claim: row.claim_interest, daysOverdue: fig.daysOverdue }).text,
+    rate_check: rateCheck(fig.reference, { claim, daysOverdue: fig.daysOverdue }).text,
     stage_now: rec === null ? 'Not due yet' : stageLabel(rec),
     next_action: next.label,
     next_on: next.on,
@@ -236,6 +239,9 @@ export function buildResources() {
       { id: 'overdue', label: 'Overdue', filter: (row) => isLive(row) && row.days_overdue > 0 },
       { id: 'week', label: 'Due this week', filter: (row) => isLive(row) && row.fig.daysToDue !== null && row.fig.daysToDue >= 0 && row.fig.daysToDue <= 7 },
       { id: 'promises', label: 'Promises', filter: (row) => isLive(row) && Boolean(row.promised_date) },
+      { id: 'broken', label: 'Broken promises', filter: (row) => isLive(row) && row.next.kind === 'broken' },
+      // Matches the dashboard's "You can claim" total: open invoices, plus settled ones that were paid late.
+      { id: 'claim', label: 'Claimable', filter: (row) => row.fig.claim && row.fig.claimable > 0 && (isLive(row) || row.next.kind === 'paid-late') },
       { id: 'disputed', label: 'Disputed', filter: (row) => row.status === 'Disputed' && !isSettled(row) },
       { id: 'plans', label: 'Payment plans', filter: (row) => row.status === 'On payment plan' && !isSettled(row) },
       { id: 'paid', label: 'Paid', filter: isSettled },
@@ -263,6 +269,10 @@ export function buildResources() {
       if (values.status === 'Paid' && !merged.paid_date) values.paid_date = today(ctx);
       if (values.status && values.status !== 'Paid' && existing?.status === 'Paid' && !('paid_date' in values)) values.paid_date = null;
       return values;
+    },
+    // Changing the amount can leave an invoice paid when payments no longer cover it, or cover it when it was open.
+    afterSave(row, { ctx, before }) {
+      if (before && Number(before.amount) !== Number(row.amount)) syncInvoice(ctx, row.id);
     },
     actions: [
       { id: 'compose', label: 'Send reminder', variant: 'primary', href: (row) => `/app/invoices/${row.id}/compose`, show: isLive },
@@ -311,15 +321,22 @@ export function buildResources() {
       { key: 'notes', label: 'Notes', type: 'textarea', rows: 2, max: 2000 },
     ],
     check(values, ctx, existing) {
+      const errors = {};
+      // A future date would reduce the balance today while the interest still runs, so the two figures would disagree.
+      if (values.date && values.date > today(ctx)) errors.date = 'The date received can\'t be in the future.';
       const inv = values.invoice ? ctx.services.db.get('SELECT amount, status FROM r_invoices WHERE org_id = ? AND id = ?', ctx.org.id, values.invoice) : null;
-      if (!inv || !values.amount) return {};
+      if (!inv || !values.amount) return errors;
       const others = ctx.services.db.get('SELECT COALESCE(SUM(amount), 0) AS s FROM r_payments WHERE org_id = ? AND invoice = ? AND id != ?', ctx.org.id, values.invoice, existing?.id ?? 0).s;
       const left = round2(inv.amount - others);
-      if (values.amount > left + 0.004) return { amount: left > 0 ? `Only ${fmtGBP(left)} is still owed on this invoice.` : 'This invoice is already fully paid.' };
-      return {};
+      if (values.amount > left + 0.004) errors.amount = left > 0 ? `Only ${fmtGBP(left)} is still owed on this invoice.` : 'This invoice is already fully paid.';
+      return errors;
     },
-    afterSave: (row, { ctx }) => syncInvoice(ctx, row.invoice),
-    afterDelete: (row, { ctx }) => syncInvoice(ctx, row.invoice),
+    afterSave(row, { ctx, before }) {
+      syncInvoice(ctx, row.invoice);
+      // A payment moved to another invoice must also update the invoice it left.
+      if (before && before.invoice !== row.invoice) syncInvoice(ctx, before.invoice, { removed: before });
+    },
+    afterDelete: (row, { ctx }) => syncInvoice(ctx, row.invoice, { removed: row }),
     afterCreate: (row) => `/app/invoices/${row.invoice}`,
   };
 
@@ -346,6 +363,12 @@ export function buildResources() {
       { key: 'template', label: 'Template', type: 'text', form: false, max: 40 },
       { key: 'outbox_id', label: 'Email', type: 'int', form: false, hidden: true, noImport: true },
     ],
+    check(values, ctx) {
+      const errors = {};
+      if (values.date && values.date > today(ctx)) errors.date = 'The date can\'t be in the future. Use "Next follow-up" to plan ahead.';
+      if (values.outcome === 'Promise to pay' && !values.promised_date) errors.promised_date = 'Enter the date they promised to pay by, so the invoice can be checked then.';
+      return errors;
+    },
     afterSave(row, { ctx, created }) {
       if (!created) return;
       const { resources } = ctx.services;
@@ -368,6 +391,10 @@ export function buildResources() {
     defaultSort: { key: 'code', dir: 'asc' },
     columns: ['code', 'name', 'channel', 'stage', 'review'],
     import: false,
+    check(values, ctx, existing) {
+      const clash = values.code && ctx.services.db.get('SELECT id FROM r_templates WHERE org_id = ? AND lower(code) = lower(?) AND id != ?', ctx.org.id, values.code, existing?.id ?? 0);
+      return clash ? { code: 'Another template already uses this number.' } : {};
+    },
     fields: [
       { key: 'code', label: 'Number', type: 'text', required: true, max: 20, help: 'Templates 0 to 5 match the chase stages.' },
       { key: 'name', label: 'Name', type: 'text', required: true, max: 120 },
@@ -418,7 +445,7 @@ export function buildResources() {
 }
 
 /** Keeps an invoice's status and paid date in step with its payments. */
-export function syncInvoice(ctx, invoiceId) {
+export function syncInvoice(ctx, invoiceId, { removed = null } = {}) {
   const { resources, db } = ctx.services;
   const r = resources.get('invoices');
   const inv = resources.one(ctx.org.id, r, invoiceId);
@@ -430,7 +457,8 @@ export function syncInvoice(ctx, invoiceId) {
       resources.patch(ctx, r, inv.id, { status: 'Paid', paid_date: pays[pays.length - 1].date });
       ctx.audit?.('update', 'invoices', inv.id, `Invoice “${inv.number}” paid in full`);
     }
-  } else if (inv.status === 'Paid' && pays.length) {
+  } else if (inv.status === 'Paid' && (pays.length || (removed && removed.date === inv.paid_date))) {
+    // Payments no longer cover the invoice. With none left, only reopen it when its Paid status came from the payment just removed.
     resources.patch(ctx, r, inv.id, { status: 'Open', paid_date: null });
   }
 }

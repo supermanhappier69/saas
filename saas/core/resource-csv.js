@@ -72,6 +72,8 @@ export function createResourceCsv({ db, resources }) {
   };
 
   function importCSV(ctx, r, text, { commit = false } = {}) {
+    // .xlsx files are zip archives; without this they parse as one garbled header row.
+    if (String(text).startsWith('PK\u0003\u0004')) throw new HttpError(415, 'That looks like an Excel workbook. In Excel choose File › Save As › CSV (UTF-8), then upload the CSV.');
     const table = parseCSV(text);
     if (!table.length) throw new HttpError(422, 'The file is empty.');
     const [header, ...body] = table;
@@ -82,13 +84,24 @@ export function createResourceCsv({ db, resources }) {
     const missing = importable(r).filter((f) => f.required && f.default === undefined && !used.has(f.key)).map((f) => f.label);
     if (missing.length && idCol < 0) throw new HttpError(422, `Add the required column${missing.length > 1 ? 's' : ''}: ${missing.join(', ')}.`);
 
+    // In a file a number is more likely to be a name (invoice 1042) than a record ID, so an exact unique name match wins.
+    const byName = (f, raw) => {
+      const s = String(raw ?? '').trim().toLowerCase();
+      if (!s || !/^\d+$/.test(s)) return raw ?? '';
+      const hits = [...resources.labelMap(ctx, f.ref)].filter(([, label]) => String(label).toLowerCase() === s);
+      return hits.length === 1 ? String(hits[0][0]) : raw;
+    };
     const run = () => body.map((cells, i) => {
       const line = i + 2;
       const input = {};
-      columns.forEach((f, ci) => {
-        if (f) input[f.key] = cells[ci] ?? '';
-      });
       const idRaw = idCol >= 0 ? String(cells[idCol] ?? '').trim() : '';
+      columns.forEach((f, ci) => {
+        if (!f) return;
+        const cell = f.type === 'ref' ? byName(f, cells[ci]) : cells[ci] ?? '';
+        // On a new row a blank cell means "use the default" (Status → Open, Claim interest → Yes) rather than clearing it.
+        if (!idRaw && f.default !== undefined && String(cell).trim() === '') return;
+        input[f.key] = cell;
+      });
       try {
         if (idRaw) {
           if (!/^\d+$/.test(idRaw) || !resources.one(ctx.org.id, r, Number(idRaw))) {

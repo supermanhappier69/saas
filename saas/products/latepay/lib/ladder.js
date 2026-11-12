@@ -24,7 +24,9 @@ export const DEFAULT_LADDER = { pre_due_days: 3, stage2_from: 8, stage3_from: 15
 /** Ladder timings from workspace settings, falling back to the kit's defaults and keeping them in order. */
 export function ladderFrom(settings = {}) {
   const pick = (k) => {
-    const v = Number(settings[k]);
+    const raw = settings[k];
+    // Blank or missing means "not set": Number(null) and Number('') are 0, which would collapse the ladder.
+    const v = raw === null || raw === undefined || String(raw).trim() === '' ? NaN : Number(raw);
     return Number.isInteger(v) && v >= 0 ? v : DEFAULT_LADDER[k];
   };
   const L = { pre_due_days: pick('pre_due_days'), stage2_from: pick('stage2_from'), stage3_from: pick('stage3_from'), stage4_from: pick('stage4_from'), stage5_from: pick('stage5_from') };
@@ -72,7 +74,7 @@ export function nextAction(inv, fig, log, { today, L }) {
   const out = (o) => ({ stage: null, template: null, tone: 'gray', on: null, ...o, now: Boolean(o.on && o.on <= today) });
   if (inv.status === 'Written off') return out({ kind: 'closed', label: 'Written off' });
   if (fig.settled) {
-    if (fig.paidLate && fig.claim && fig.claimable > 0) return out({ kind: 'paid-late', label: `Paid ${fig.daysOverdue} days late: £${fig.claimable.toFixed(2)} still claimable`, tone: 'purple' });
+    if (fig.paidLate && fig.claim && fig.claimable > 0) return out({ kind: 'paid-late', label: `Paid ${daysLabel(fig.daysOverdue)} late: £${fig.claimable.toFixed(2)} still claimable`, tone: 'purple' });
     return out({ kind: 'closed', label: 'Paid', tone: 'green' });
   }
   if (!inv.due_date) return out({ kind: 'setup', label: 'Add a due date', tone: 'orange', on: today });

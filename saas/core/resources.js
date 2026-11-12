@@ -161,12 +161,9 @@ export function createResources({ db, definition }) {
     if (id !== null && !db.get(`SELECT id FROM "${rr.table}" WHERE org_id = ? AND id = ?`, ctx.org.id, id)) id = null;
     if (id === null) {
       const needle = s.toLowerCase();
-      for (const [k, label] of labelMap(ctx, f.ref)) {
-        if (String(label).toLowerCase() === needle) {
-          id = k;
-          break;
-        }
-      }
+      const hits = [...labelMap(ctx, f.ref)].filter(([, label]) => String(label).toLowerCase() === needle);
+      if (hits.length > 1) throw new Error(`More than one ${rr.singular.toLowerCase()} is called “${s}”. Rename one of them, or use the ID.`);
+      if (hits.length === 1) id = hits[0][0];
     }
     if (id === null) throw new Error(`Choose a valid ${rr.singular.toLowerCase()}.`);
     return id;
@@ -341,7 +338,7 @@ export function createResources({ db, definition }) {
     invalidate(ctx, r);
   }
 
-  function remove(ctx, r, id) {
+  function remove(ctx, r, id, { quiet = false } = {}) {
     const existing = one(ctx.org.id, r, id);
     if (!existing) throw new HttpError(404, `${r.singular} not found`);
     return db.tx(() => {
@@ -356,7 +353,7 @@ export function createResources({ db, definition }) {
               const n = kids.length;
               throw new HttpError(409, `This ${r.singular.toLowerCase()} is linked to ${n} ${n === 1 ? other.singular.toLowerCase() : other.label.toLowerCase()}. Delete or move ${n === 1 ? 'it' : 'them'} first.`);
             }
-            if (mode === 'cascade') for (const k of kids) remove(ctx, other, k.id);
+            if (mode === 'cascade') for (const k of kids) remove(ctx, other, k.id, { quiet });
             if (mode === 'null') db.run(`UPDATE "${other.table}" SET "${f.key}" = NULL WHERE org_id = ? AND "${f.key}" = ?`, ctx.org.id, existing.id);
           } else if (f.type === 'refs') {
             for (const x of db.all(`SELECT id, "${f.key}" AS v FROM "${other.table}" WHERE org_id = ? AND "${f.key}" IS NOT NULL`, ctx.org.id)) {
@@ -368,11 +365,11 @@ export function createResources({ db, definition }) {
         }
       }
       ctx.services?.files?.removeFor(ctx.org.id, r.name, existing.id);
-      const label = titleOf(ctx, r, existing);
+      const label = quiet ? '' : titleOf(ctx, r, existing);
       db.run(`DELETE FROM "${r.table}" WHERE org_id = ? AND id = ?`, ctx.org.id, existing.id);
       invalidate(ctx, r);
       r.afterDelete?.(existing, { ctx, api });
-      ctx.audit?.('delete', r.name, existing.id, `${r.singular} “${label}” deleted`);
+      if (!quiet) ctx.audit?.('delete', r.name, existing.id, `${r.singular} “${label}” deleted`);
       return existing;
     });
   }
@@ -381,18 +378,35 @@ export function createResources({ db, definition }) {
     return all.reduce((n, r) => n + db.get(`SELECT COUNT(*) AS n FROM "${r.table}" WHERE org_id = ? AND is_sample = 1`, orgId).n, 0);
   }
 
+  /**
+   * Deletes the SAMPLE records through remove(), so anything the user logged against them (a payment or a chase entry on a sample
+   * invoice) goes too instead of being left pointing at nothing. A sample record that the user's own records still need, such as a
+   * sample customer with a real invoice, is kept and becomes an ordinary record. Returns { removed, kept }.
+   */
   function removeSamples(ctx) {
     return db.tx(() => {
-      let n = 0;
+      let removed = 0;
+      let kept = 0;
       for (const r of [...all].reverse()) {
         for (const row of db.all(`SELECT id FROM "${r.table}" WHERE org_id = ? AND is_sample = 1`, ctx.org.id)) {
-          ctx.services?.files?.removeFor(ctx.org.id, r.name, row.id);
-          n += db.run(`DELETE FROM "${r.table}" WHERE org_id = ? AND id = ?`, ctx.org.id, row.id).changes;
+          if (!one(ctx.org.id, r, row.id)) continue;
+          db.exec('SAVEPOINT sample_row');
+          try {
+            remove(ctx, r, row.id, { quiet: true });
+            db.exec('RELEASE sample_row');
+            removed++;
+          } catch (err) {
+            db.exec('ROLLBACK TO sample_row');
+            db.exec('RELEASE sample_row');
+            if (!(err instanceof HttpError && err.status === 409)) throw err;
+            db.run(`UPDATE "${r.table}" SET is_sample = 0 WHERE org_id = ? AND id = ?`, ctx.org.id, row.id);
+            kept++;
+          }
         }
         invalidate(ctx, r);
       }
-      ctx.audit?.('delete', null, null, `Removed ${n} sample records`);
-      return n;
+      ctx.audit?.('delete', null, null, `Removed ${removed} sample records${kept ? `, kept ${kept} that your own records use` : ''}`);
+      return { removed, kept };
     });
   }
 
