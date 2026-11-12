@@ -16,8 +16,81 @@ export function isFounder(ctx) {
   if (list.includes(String(ctx.user.email).toLowerCase())) return true;
   return ctx.services.config.NODE_ENV !== 'production' && !list.length && ctx.user.id === 1 && !ctx.org?.is_demo;
 }
+
+/**
+ * Sign-up never checks that an email address belongs to the person typing it, so being listed in FOUNDER_EMAILS is not enough:
+ * whoever registered the address first would see revenue and leads. A founder proves they own the inbox once, with an emailed link.
+ * (The development-only "first user" fallback, used when no list is configured, needs no proof.)
+ */
+export function isVerifiedFounder(ctx) {
+  if (!isFounder(ctx)) return false;
+  const email = String(ctx.user.email).toLowerCase();
+  if (!(ctx.services.config.FOUNDER_EMAILS || []).includes(email)) return true;
+  return ctx.services.db.kvGet(`founder:verified:${email}`) === String(ctx.user.id);
+}
 function requireFounder(ctx) {
   if (!isFounder(ctx)) throw new HttpError(403, 'The founder console is only for the people listed in FOUNDER_EMAILS.');
+  if (!isVerifiedFounder(ctx)) throw new HttpError(403, 'Verify your email address first: open the founder console and ask for the link.');
+}
+
+const VERIFY_KIND = 'founder-verify';
+
+function verifyPage(ctx, { problem = null } = {}) {
+  const { config, mailer } = ctx.services;
+  const email = String(ctx.user.email).toLowerCase();
+  const production = config.NODE_ENV === 'production';
+  const unsendable = production && mailer.provider === 'log';
+  const body = html`${problem ? alert(problem, 'red') : ''}<p>The founder console shows revenue, sign-ups and the people on the waitlist, so it only opens for an email address you have proved is yours.</p>${
+    unsendable
+      ? alert('Email delivery is not set up (add RESEND_API_KEY or POSTMARK_TOKEN), so the link cannot be sent yet.', 'orange')
+      : html`<p>We will email a one-time link to <strong>${email}</strong>. It works for 1 hour. Open it while you are signed in as this account.</p><form method="post" action="/app/founder/verify" class="form">${csrfField(ctx)}<div class="form-actions">${button('Email me the link', { variant: 'primary' })}</div></form>`
+  }${!production && mailer.provider === 'log' ? html`<p class="help">Email delivery is not set up here, so the link is saved under <a href="/app/activity/emails">Activity → Emails</a> instead of being sent.</p>` : ''}`;
+  return appPage(ctx, {
+    title: 'Verify your email · Founder',
+    active: 'founder',
+    body: html`${pageHeader({ title: 'Founder console', subtitle: 'Confirm it is you before the numbers open.' })}${card({ title: 'Verify your email address', body })}`,
+  });
+}
+
+/** A founder who has not verified yet sees the verification page in place of any console page. */
+const gated = (handler) => (ctx) => (isFounder(ctx) && !isVerifiedFounder(ctx) ? { status: 403, html: verifyPage(ctx) } : handler(ctx));
+
+async function sendVerification(ctx) {
+  if (!isFounder(ctx)) throw new HttpError(403, 'The founder console is only for the people listed in FOUNDER_EMAILS.');
+  if (isVerifiedFounder(ctx)) return { redirect: '/app/founder' };
+  const { auth, db, mailer, config, limiter } = ctx.services;
+  const real = mailer.provider !== 'log';
+  if (!real && config.NODE_ENV === 'production') throw new HttpError(503, 'Email delivery is not set up (RESEND_API_KEY or POSTMARK_TOKEN), so the link cannot be sent.');
+  limiter?.(`founder-verify:${ctx.user.id}`, 5, 15 * 60 * 1000);
+  const email = String(ctx.user.email).toLowerCase();
+  db.run('UPDATE tokens SET used_at = ? WHERE kind = ? AND user_id = ? AND used_at IS NULL', nowISO(), VERIFY_KIND, ctx.user.id);
+  const link = `${config.BASE_URL}/app/founder/verify/${auth.createToken(VERIFY_KIND, { userId: ctx.user.id, email, hours: 1 })}`;
+  const sent = await mailer.send({
+    // Mail sent by a real provider is kept out of the workspace's Activity → Emails: someone who registered this address first could read the link there.
+    // With no provider the outbox is the only place to find it, which is fine for development (and refused above in production).
+    orgId: real ? null : ctx.org.id,
+    to: email,
+    subject: `Open the ${ctx.definition.name} founder console`,
+    text: `Hello ${ctx.user.name},\n\nUse this link, while signed in as ${email}, to open the ${ctx.definition.name} founder console:\n${link}\n\nIt works once and for 1 hour. You are getting this because ${email} is listed as a founder. If you did not ask for it, ignore this email: nobody can open the console without the link.\n\n${ctx.definition.name}`,
+    related: 'verify',
+  });
+  if (sent.status === 'failed') return { redirect: '/app/founder', flash: { text: 'The email could not be sent. Try again in a moment.', tone: 'red' } };
+  return { redirect: '/app/founder', flash: sent.status === 'sent' ? `We have emailed a link to ${email}. It works once, for 1 hour.` : 'Email delivery is not set up, so the link is under Activity → Emails instead of in your inbox.' };
+}
+
+function confirmVerification(ctx) {
+  if (!isFounder(ctx)) throw new HttpError(403, 'The founder console is only for the people listed in FOUNDER_EMAILS.');
+  if (isVerifiedFounder(ctx)) return { redirect: '/app/founder', flash: 'Your email address is already verified.' };
+  const { auth, db } = ctx.services;
+  const email = String(ctx.user.email).toLowerCase();
+  const t = auth.findToken(VERIFY_KIND, ctx.params.token);
+  if (!t) return { status: 410, html: verifyPage(ctx, { problem: 'That link has expired or has already been used. Ask for a new one.' }) };
+  if (t.user_id !== ctx.user.id || String(t.email).toLowerCase() !== email) {
+    return { status: 403, html: verifyPage(ctx, { problem: 'That link was sent for a different account. Log in as the address it was sent to, then open it again.' }) };
+  }
+  auth.useToken(t.id);
+  db.kvSet(`founder:verified:${email}`, String(ctx.user.id));
+  return { redirect: '/app/founder', flash: 'Email address verified. The founder console is open.' };
 }
 
 export const CHECKLIST = [
@@ -281,14 +354,16 @@ export function leadsCsv(ctx) {
 }
 
 export function registerFounder(router) {
-  router.get('/app/founder', numbersPage);
-  router.get('/app/founder/checklist', checklistPage);
-  router.post('/app/founder/checklist', checklistToggle);
-  router.get('/app/founder/plan', planPage);
-  router.get('/app/founder/marketing', marketingPage);
-  router.get('/app/founder/model', modelPage);
-  router.get('/app/founder/leads', leadsPage);
-  router.get('/app/founder/leads.csv', leadsCsv);
+  router.get('/app/founder', gated(numbersPage));
+  router.get('/app/founder/checklist', gated(checklistPage));
+  router.post('/app/founder/checklist', gated(checklistToggle));
+  router.get('/app/founder/plan', gated(planPage));
+  router.get('/app/founder/marketing', gated(marketingPage));
+  router.get('/app/founder/model', gated(modelPage));
+  router.get('/app/founder/leads', gated(leadsPage));
+  router.get('/app/founder/leads.csv', gated(leadsCsv));
+  router.post('/app/founder/verify', sendVerification);
+  router.get('/app/founder/verify/:token', confirmVerification);
 }
 
 export { nowISO };
