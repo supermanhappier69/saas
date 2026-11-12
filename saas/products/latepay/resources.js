@@ -3,7 +3,7 @@
 import { HttpError, addDays, round2, todayISO, fmtGBP } from '../../core/util.js';
 import { html, badge } from '../../core/ui.js';
 import { invoiceFigures, rateCheck, fmtShort } from './lib/calc.js';
-import { nextAction, ladderFrom, LOG_STAGE_OPTIONS, STAGE_OPTIONS, stageForDays, stageLabel, whenLabel } from './lib/ladder.js';
+import { nextAction, ladderFrom, LOG_STAGE_OPTIONS, STAGE_OPTIONS, SKIPPED, isContact, stageForDays, stageLabel, whenLabel } from './lib/ladder.js';
 import { DEFAULT_TEMPLATES, defaultTemplate } from './lib/templates.js';
 
 export const CUSTOMER_TYPES = ['Limited company / LLP', 'Sole trader', 'Partnership', 'Public sector body', 'Charity or other organisation', 'Consumer (not a business)'];
@@ -11,7 +11,7 @@ export const CONSUMER = 'Consumer (not a business)';
 export const INVOICE_STATUSES = ['Open', 'Disputed', 'On payment plan', 'Paid', 'Written off'];
 const STATUS_TONES = { Open: 'blue', Disputed: 'orange', 'On payment plan': 'purple', Paid: 'green', 'Written off': 'gray' };
 const CHANNELS = ['Email', 'Phone', 'Letter', 'In person', 'Text message', 'Other'];
-const OUTCOMES = ['Sent', 'No response', 'Promise to pay', 'Paid', 'Dispute raised', 'Payment plan agreed', 'Wrong contact', 'Other'];
+const OUTCOMES = ['Sent', 'No response', 'Promise to pay', 'Paid', 'Dispute raised', 'Payment plan agreed', 'Wrong contact', 'Other', SKIPPED];
 const today = (ctx) => todayISO(ctx.services.config?.TIMEZONE);
 const isSettled = (row) => row.balance <= 0 || row.status === 'Paid';
 const isLive = (row) => !isSettled(row) && row.status !== 'Written off';
@@ -65,6 +65,7 @@ function computeInvoice(row, ctx) {
     paidDate: row.paid_date, claim, rateOverride: row.rate_override, workspaceRates: b.rates,
   });
   const log = b.chases.get(row.id) || [];
+  const contacts = log.filter(isContact);
   const next = nextAction({ ...row, customer_type: customer?.customer_type }, fig, log, { today: b.today, L: b.L });
   const rec = fig.settled ? null : stageForDays(fig.daysOverdue, fig.daysToDue, b.L);
   return {
@@ -75,6 +76,7 @@ function computeInvoice(row, ctx) {
     days_overdue: fig.daysOverdue,
     paid_total: fig.paid,
     balance: fig.balance,
+    credit: fig.credit,
     interest: fig.interest,
     daily_interest: fig.dailyInterest,
     fixed_sum: fig.fixedSum,
@@ -84,7 +86,7 @@ function computeInvoice(row, ctx) {
     stage_now: rec === null ? 'Not due yet' : stageLabel(rec),
     next_action: next.label,
     next_on: next.on,
-    last_contact: log.length ? log[log.length - 1].date : null,
+    last_contact: contacts.length ? contacts[contacts.length - 1].date : null,
   };
 }
 
@@ -118,6 +120,7 @@ function creditCheck(c, invoices, stopDays) {
   return {
     outstanding, overdue, overdue_count: overdueList.length, oldest_overdue: oldest || null, avg_days_late: avgLate, credit_check: check, credit_tone: tone,
     claimable: round2(live.reduce((s, i) => s + i.fig.claimable, 0)),
+    credit: round2(invoices.reduce((s, i) => s + i.fig.credit, 0)),
     stop_suggested: tone === 'red' && c.account_status !== 'On stop',
   };
 }
@@ -155,6 +158,7 @@ export function buildResources() {
       { key: 'oldest_overdue', label: 'Oldest overdue (days)', type: 'int' },
       { key: 'avg_days_late', label: 'Average days late (paid invoices)', type: 'number', dp: 1 },
       money('claimable', 'Interest and compensation claimable'),
+      money('credit', 'Credit held (overpayments)'),
       { key: 'credit_check', label: 'Credit check', type: 'text', render: (row) => badge(row.credit_check, row.credit_tone) },
     ],
     views: [
@@ -162,6 +166,13 @@ export function buildResources() {
       { id: 'watch', label: 'Over limit or long overdue', filter: (row) => row.credit_tone === 'red' },
       { id: 'stop', label: 'On stop', filter: (row) => row.account_status === 'On stop' },
     ],
+    // Two customers with the same name make a CSV import (which finds a customer by name) ambiguous, so a name can only be used once.
+    check(values, ctx, existing) {
+      const key = (s) => String(s ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
+      if (!values.name || (existing && key(existing.name) === key(values.name))) return {};
+      const clash = ctx.services.db.all('SELECT id, name FROM r_customers WHERE org_id = ? AND id != ?', ctx.org.id, existing?.id ?? 0).find((c) => key(c.name) === key(values.name));
+      return clash ? { name: `You already have a customer called “${clash.name}”. Open that one, or give this customer a different name (for example add the town).` } : {};
+    },
     prepare(list, ctx) {
       const byCustomer = new Map();
       for (const i of allInvoices(ctx)) {
@@ -222,6 +233,7 @@ export function buildResources() {
       { key: 'days_overdue', label: 'Days overdue', type: 'int' },
       money('paid_total', 'Paid so far'),
       money('balance', 'Balance'),
+      money('credit', 'Overpaid (credit)'),
       { key: 'ref_rate', label: 'Reference rate', type: 'percent' },
       money('interest', 'Statutory interest to date'),
       money('daily_interest', 'Daily interest'),
@@ -316,6 +328,7 @@ export function buildResources() {
       { key: 'invoice', label: 'Invoice', type: 'ref', ref: 'invoices', required: true, onDelete: 'cascade', filter: true, relatedLabel: 'Payments', example: 'INV-1042' },
       { key: 'date', label: 'Date received', type: 'date', required: true, default: (ctx) => today(ctx), example: '15/10/2026' },
       { key: 'amount', label: 'Amount', type: 'money', required: true, min: 0.01, example: '1200.00' },
+      { key: 'overpayment', label: 'Record as overpayment', type: 'bool', help: 'Tick this only if the customer paid more than is owed on the invoice, for example by paying twice. The extra is kept as a credit on the invoice and on their statement, to refund or set against their next invoice.' },
       { key: 'method', label: 'Method', type: 'select', options: ['Bank transfer', 'Card', 'Direct debit', 'Cheque', 'Cash', 'Other'], default: 'Bank transfer' },
       { key: 'reference', label: 'Reference', type: 'text', max: 100, search: true },
       { key: 'notes', label: 'Notes', type: 'textarea', rows: 2, max: 2000 },

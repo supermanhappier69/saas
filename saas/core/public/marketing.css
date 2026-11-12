@@ -182,7 +182,7 @@
 .mk-feature-flip .mk-feature-copy { order: 2; }
 .mk-feature-label { margin: 0 0 0.85rem; font-size: 0.8125rem; font-weight: 600; color: var(--brand); }
 .mk-feature h3 { margin: 0; font-family: var(--display); font-size: clamp(1.65rem, 2.7vw, 2.2rem); font-weight: 540; line-height: 1.1; letter-spacing: -0.02em; text-wrap: balance; }
-.mk-feature-copy > p:not(.mk-feature-label):not(.mk-aside) { margin: 1.1rem 0 0; font-size: 1.0313rem; line-height: 1.65; color: var(--muted); }
+.mk-feature-copy > p:not(.mk-feature-label):not(.mk-aside):not(.mk-sources) { margin: 1.1rem 0 0; font-size: 1.0313rem; line-height: 1.65; color: var(--muted); }
 .mk-points { display: grid; gap: 0.65rem; margin: 1.6rem 0 0; padding: 0; font-size: 0.9375rem; list-style: none; color: var(--text); }
 .mk-points li { display: flex; align-items: flex-start; gap: 0.65rem; }
 .mk-points .icon { width: 16px; height: 16px; margin-top: 0.22rem; color: var(--brand); stroke-width: 2.1; }
@@ -250,7 +250,63 @@
 .mk-includes .mk-points { margin-top: 1.1rem; font-size: 0.875rem; }
 @media (max-width: 900px) { .mk-pricing { grid-template-columns: minmax(0, 1fr); } .mk-includes { grid-column: 1; grid-row: auto; } .mk-pricing .plans-note { grid-row: auto; } }
 .plans-note { margin: 0; font-size: 0.875rem; color: var(--muted); }
+.section-plan-table { padding-top: 0.5rem; }
+.mk-plan-table { min-width: 34rem; }
+.mk-plan-table tbody th { width: 54%; }
+.mk-plan-table thead th:not(:first-child), .mk-plan-table td { text-align: center; }
 
+/* ---------- Inline calculator, segments, mid-page CTA ---------- */
+.mk-calc { padding: clamp(2.5rem, 5vw, 3.5rem) 0; border-bottom: 1px solid var(--border); }
+.mk-calc-inner {
+  display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 1.5rem 2.5rem; align-items: center;
+  padding: clamp(1.4rem, 3vw, 2rem) clamp(1.25rem, 3vw, 2.25rem);
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm);
+}
+.mk-calc-copy .mk-kicker { margin-bottom: 0.6rem; }
+.mk-calc-title { margin: 0; font-family: var(--display); font-size: clamp(1.6rem, 2.6vw, 2.1rem); font-weight: 540; line-height: 1.1; letter-spacing: -0.02em; }
+.mk-calc-copy p:last-child { margin: 0.6rem 0 0; color: var(--muted); }
+.mk-calc-form { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 0.75rem; align-items: end; }
+.mk-calc-field { min-width: 0; }
+.mk-calc-form label { font-size: 0.8125rem; }
+.mk-calc-form input:where(:not([type="checkbox"])) { min-height: 44px; font-size: 1rem; }
+.mk-calc-form .affix { font-size: 1rem; }
+.mk-calc-form .btn { min-height: 44px; padding-inline: 1.25rem; }
+@media (max-width: 900px) {
+  .mk-calc-inner { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 560px) {
+  .mk-calc-form { grid-template-columns: minmax(0, 1fr); }
+  .mk-calc-form .btn { width: 100%; }
+}
+
+.mk-segments { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-top: 1px solid var(--border-strong); }
+.mk-segment { padding: 1.6rem 1.5rem 0.25rem 0; }
+.mk-segment + .mk-segment { padding-left: 1.5rem; border-left: 1px solid var(--border); }
+.mk-segment h3 { margin: 0 0 0.5rem; font-size: 1.0313rem; font-weight: 600; }
+.mk-segment p { margin: 0; font-size: 0.9375rem; line-height: 1.6; color: var(--muted); }
+@media (max-width: 900px) {
+  .mk-segments { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 1.5rem; }
+  .mk-segment:nth-child(odd) { padding-left: 0; border-left: 0; }
+}
+@media (max-width: 560px) {
+  .mk-segments { grid-template-columns: minmax(0, 1fr); row-gap: 0; }
+  .mk-segment, .mk-segment + .mk-segment { padding: 1.25rem 0; border-left: 0; border-bottom: 1px solid var(--border); }
+}
+
+.mk-inline-cta {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 1rem 2rem;
+  margin-top: clamp(3.5rem, 7vw, 5.5rem); padding: 1.4rem 1.6rem;
+  background: var(--paper-2); border: 1px solid var(--border); border-radius: var(--radius-lg);
+}
+.mk-inline-cta p { margin: 0; font-size: 1.0625rem; color: var(--text-2); }
+.mk-inline-cta p strong { color: var(--ink); }
+.mk-inline-cta .mk-actions { margin-top: 0; }
+.mk-roi { margin: 1.25rem 0 0; padding-top: 1rem; font-size: 0.875rem; line-height: 1.55; color: var(--text-2); border-top: 1px dashed var(--border-strong); }
+.mk-roi strong { display: block; margin-bottom: 0.15rem; color: var(--ink); }
+.mk-sources { margin: 1rem 0 0; font-size: 0.8125rem; line-height: 1.55; color: var(--muted); }
+.mk-sources a { color: var(--text-2); }
+
+.mk-plan-table th, .mk-plan-table td { padding-block: 0.8rem; }
 /* ---------- FAQ ---------- */
 .faq-list { border-top: 1px solid var(--border-strong); }
 .faq { border-bottom: 1px solid var(--border); }

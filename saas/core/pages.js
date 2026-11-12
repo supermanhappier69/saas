@@ -3,6 +3,7 @@ import { HttpError, isEmail, nowISO, randomToken, mdToHtml } from './util.js';
 import { html, raw, button, recordForm, csrfField, attrs, alert } from './ui.js';
 import { publicPage, authPage } from './layout.js';
 import { ROLE_LABELS } from './auth.js';
+import { icon } from './icons.js';
 
 const HOUR = 60 * 60 * 1000;
 const QUARTER = 15 * 60 * 1000;
@@ -23,6 +24,32 @@ function limit(ctx, name, max, windowMs, key = ctx.ip || 'unknown') {
 }
 
 const section = (id, title, body, cls = '') => html`<section${attrs({ id, class: cls ? `section ${cls}` : 'section' })}><div class="container"><h2>${title || ''}</h2>${body}</div></section>`;
+
+/** schema.org description of the product and its prices, so search results can show them. */
+function productSchema(ctx) {
+  const def = ctx.definition;
+  const base = ctx.services?.config?.BASE_URL || '';
+  const offers = (def.plans || []).filter((p) => !p.hidden && typeof p.price === 'number' && p.price > 0).map((p) => ({
+    '@type': 'Offer', name: p.name, price: p.price.toFixed(2), priceCurrency: 'GBP',
+    priceSpecification: { '@type': 'UnitPriceSpecification', price: p.price.toFixed(2), priceCurrency: 'GBP', valueAddedTaxIncluded: false },
+  }));
+  return {
+    '@context': 'https://schema.org', '@type': 'SoftwareApplication', name: def.name, description: def.description,
+    applicationCategory: 'BusinessApplication', operatingSystem: 'Web', url: `${base}/`, ...(offers.length ? { offers } : {}),
+  };
+}
+
+/** A Core-vs-Complete style feature table, from def.marketing.planTable { title, rows: [[label, ...one cell per plan]] }. */
+function planTable(def) {
+  const t = def.marketing?.planTable;
+  const plans = (def.plans || []).filter((p) => !p.hidden);
+  if (!t?.rows?.length || !plans.length) return '';
+  const cell = (v) => (v === true ? html`<span class="mk-yes">${icon('check', { label: 'Included' })}</span>` : v === false ? html`<span class="mk-no" aria-label="Not included">—</span>` : html`${v}`);
+  const us = (i) => (plans[i]?.featured ? html` class="mk-us"` : '');
+  return html`<section class="section section-plan-table"><div class="container"><h2>${t.title || 'Compare plans'}</h2><div class="mk-table-wrap"><table class="mk-table mk-plan-table"><thead><tr><th scope="col"><span class="sr-only">Feature</span></th>${plans.map(
+    (p, i) => html`<th scope="col"${us(i)}>${p.name}</th>`,
+  )}</tr></thead><tbody>${t.rows.map(([label, ...cells]) => html`<tr><th scope="row">${label}</th>${cells.map((c, i) => html`<td data-label="${plans[i]?.name || ''}"${us(i)}>${cell(c)}</td>`)}</tr>`)}</tbody></table></div></div></section>`;
+}
 
 export function pricingGrid(def) {
   const plans = (def.plans || []).filter((p) => !p.hidden);
@@ -53,7 +80,7 @@ function landingPage(ctx) {
   const def = ctx.definition;
   const m = def.marketing || {};
   // Products can supply a bespoke landing body; the generic sections below are the fallback.
-  if (typeof m.landing === 'function') return publicPage(def, ctx, { description: m.metaDescription || def.description, body: m.landing(ctx) });
+  if (typeof m.landing === 'function') return publicPage(def, ctx, { description: m.metaDescription || def.description, body: m.landing(ctx), jsonLd: productSchema(ctx) });
   const cta = m.cta || 'Start free trial';
   const actions = html`<div class="hero-actions">${button(cta, { href: '/signup', variant: 'primary' })}${button('Try the demo', { href: '/demo' })}</div>`;
   const visual = m.heroImage
@@ -202,7 +229,9 @@ function signupPage(ctx, { values = {}, errors = {}, status = 200 } = {}) {
     submit: def.marketing?.cta || 'Start free trial',
     extra: html`<p class="small muted">By creating an account you agree to the <a href="/terms">Terms</a> and <a href="/privacy">Privacy Policy</a>.</p>`,
   });
-  return withStatus(authPage(def, ctx, { title: 'Start your free trial', intro: `${trialDays(def)} days free. No card needed. ${oneOffOnly(def) ? 'One price after that, no subscription.' : 'Cancel any time.'}`, body, footer: html`Already have an account? <a href="/login">Log in</a>` }), status);
+  const s = def.marketing?.signupAside;
+  const aside = s ? html`<h2>${s.title}</h2><ul class="auth-points">${s.points.map((p) => html`<li>${icon('check')}<span>${p}</span></li>`)}</ul>${s.note ? html`<p class="auth-note">${s.note}</p>` : ''}` : null;
+  return withStatus(authPage(def, ctx, { title: 'Start your free trial', intro: `${trialDays(def)} days free. No card needed. ${oneOffOnly(def) ? 'One price after that, no subscription.' : 'Cancel any time.'}`, body, footer: html`Already have an account? <a href="/login">Log in</a>`, aside }), status);
 }
 
 function welcomeText(def, user, config) {
@@ -301,7 +330,7 @@ export function registerPages(router) {
   router.get('/pricing', (ctx) => {
     const def = ctx.definition;
     const intro = def.marketing?.pricingIntro || (oneOffOnly(def) ? 'One payment, no subscription. Start with a free trial and choose a plan when you are ready.' : 'Simple monthly plans. Start with a free trial and choose a plan when you are ready.');
-    return publicPage(def, ctx, { title: 'Pricing', body: html`<section class="page-hero"><div class="container"><p class="eyebrow">Pricing</p><h1>${def.marketing?.pricingHeadline || 'Plans and pricing'}</h1><p class="lead">${intro}</p></div></section><section class="section section-plans"><div class="container">${pricingGrid(def)}</div></section>${faqSection(def)}` });
+    return publicPage(def, ctx, { title: 'Pricing', body: html`<section class="page-hero"><div class="container"><p class="eyebrow">Pricing</p><h1>${def.marketing?.pricingHeadline || 'Plans and pricing'}</h1><p class="lead">${intro}</p></div></section><section class="section section-plans"><div class="container">${pricingGrid(def)}</div></section>${planTable(def)}${faqSection(def)}` });
   });
   router.get('/terms', (ctx) => legalPage(ctx, 'terms'));
   router.get('/privacy', (ctx) => legalPage(ctx, 'privacy'));
@@ -310,9 +339,19 @@ export function registerPages(router) {
     return { json: { ok: true, product: ctx.definition.slug, time: nowISO() } };
   }, { public: true, api: true });
   router.get('/robots.txt', (ctx) => ({
-    body: ctx.services.config?.ALLOW_INDEXING ? 'User-agent: *\nDisallow: /app/\nDisallow: /api/\nDisallow: /invite/\nDisallow: /reset/\n' : 'User-agent: *\nDisallow: /\n',
+    body: ctx.services.config?.ALLOW_INDEXING
+      ? `User-agent: *\nDisallow: /app/\nDisallow: /api/\nDisallow: /invite/\nDisallow: /reset/\nSitemap: ${ctx.services.config.BASE_URL}/sitemap.xml\n`
+      : 'User-agent: *\nDisallow: /\n',
     type: 'text/plain; charset=utf-8',
   }), { public: true });
+  router.get('/sitemap.xml', (ctx) => {
+    const { config } = ctx.services;
+    if (!config?.ALLOW_INDEXING) throw new HttpError(404, 'Page not found');
+    const paths = [...new Set(['/', '/pricing', '/demo', '/signup', '/contact', '/terms', '/privacy', ...(ctx.definition.marketing?.sitemap || [])])];
+    const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const urls = paths.map((p) => `<url><loc>${esc(config.BASE_URL + p)}</loc></url>`).join('');
+    return { body: `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${urls}</urlset>\n`, type: 'application/xml; charset=utf-8' };
+  }, { public: true });
 
   router.get('/signup', (ctx) => (ctx.user ? { redirect: '/app' } : signupPage(ctx)));
   router.post('/signup', async (ctx) => {
