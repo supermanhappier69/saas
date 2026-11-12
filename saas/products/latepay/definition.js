@@ -14,6 +14,7 @@ import { freePage, freeTermsPage } from './pages/free.js';
 import { registerFounder, isFounder } from './pages/founder.js';
 import { landingBody } from './pages/landing.js';
 import { registerSearch } from '../../core/search.js';
+import { trialEmails } from './lifecycle.js';
 
 const resources = buildResources();
 const R = Object.fromEntries(resources.map((r) => [r.name, r]));
@@ -38,6 +39,7 @@ const SETTINGS_FIELDS = [
   { key: 'stage3_from', label: 'Stage 3, final notice', type: 'int', min: 3, max: 365, required: true, group: 'Chase ladder (days overdue each stage starts)' },
   { key: 'stage4_from', label: 'Stage 4, interest and compensation claim', type: 'int', min: 4, max: 365, required: true, group: 'Chase ladder (days overdue each stage starts)' },
   { key: 'stage5_from', label: 'Stage 5, letter before action', type: 'int', min: 5, max: 400, required: true, group: 'Chase ladder (days overdue each stage starts)' },
+  { key: 'trial_emails', label: 'During the free trial, email owners and admins a few reminders (getting started, a summary of what you’re owed, and when the trial ends)', type: 'bool', group: 'Emails from PaidOnTime' },
 ];
 
 // The mark: a clock face whose hands form a tick. Colours come from the theme via the logo-* classes.
@@ -72,7 +74,7 @@ export const definition = {
       flags: { complete: true },
     },
   ],
-  defaultSettings: { default_terms: 30, stop_days: 30, weekly_digest: true, email_footer: true, ...DEFAULT_LADDER },
+  defaultSettings: { default_terms: 30, stop_days: 30, weekly_digest: true, email_footer: true, trial_emails: true, ...DEFAULT_LADDER },
   settingsFields: SETTINGS_FIELDS,
   // The ladder silently reorders out-of-order stages, so refuse them instead of saving numbers that aren't used.
   validateSettings(values) {
@@ -170,8 +172,14 @@ export const definition = {
   },
   dashboard,
   jobs: {
-    /** Monday morning: email the week's chase list to the workspace's owners and admins. */
+    /** Each day: the trial email that's due (if any), then the Monday chase list. */
     async daily(services, org, date) {
+      const trial = await trialEmails(services, org, date);
+      const digest = await definition.jobs.digest(services, org, date);
+      return trial ? { ...digest, trial } : digest;
+    },
+    /** Monday morning: email the week's chase list to the workspace's owners and admins. */
+    async digest(services, org, date) {
       if (org.is_demo || org.settings?.weekly_digest === false) return { skipped: 'off' };
       if (new Date(`${date}T12:00:00Z`).getUTCDay() !== 1) return { skipped: 'not Monday' };
       const ctx = { org, services, user: null, cache: {}, role: 'viewer' };
