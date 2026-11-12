@@ -413,7 +413,11 @@ body.app { font-size: 0.9375rem; background: var(--surface); }
 .card-foot { padding: 0.75rem 1.15rem; font-size: 0.875rem; background: var(--surface-2); border-top: 1px solid var(--border-soft); }
 .card-danger { border-color: var(--red-line); }
 .card-danger .card-head h2 { color: var(--red); }
-.danger-zone { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; margin-top: 1rem; padding: 0.9rem 1rem; background: var(--red-soft); border: 1px solid var(--red-line); border-radius: var(--radius-sm); }
+.danger-zone { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; margin-top: 1rem; padding: 0.9rem 1rem; background: transparent; border: 1px dashed var(--red-line); border-radius: var(--radius-sm); }
+.detail-side > .danger-zone:first-child { margin-top: 0; }
+/* With nothing else in the side column, drop it below the details so "Delete" isn't the first thing you see. */
+.detail-grid:has(> .detail-side > .danger-zone:only-child) { grid-template-columns: minmax(0, 1fr); }
+.detail-grid:has(> .detail-side > .danger-zone:only-child) > .detail-side { justify-self: start; }
 
 /* A single ruled panel of figures, rather than a row of separate cards. */
 .stats {
@@ -558,7 +562,9 @@ a.stat:hover::after { opacity: 1; transform: none; }
 .checklist { margin: 0; padding: 0; list-style: none; }
 .checklist li, .check-row { position: relative; display: flex; align-items: flex-start; gap: 0.6rem; padding: 0.55rem 0 0.55rem 1.6rem; border-bottom: 1px solid var(--border-soft); }
 .checklist li:last-child { border-bottom: 0; }
-.checklist li::before, .check-row::before { content: ""; position: absolute; left: 0; top: 0.75rem; width: 14px; height: 14px; border: 1.5px solid var(--border-strong); border-radius: 4px; }
+/* Checklists are mostly how-to steps, so a neutral marker; .done rows get a filled tick. */
+.checklist li::before, .check-row::before { content: ""; position: absolute; left: 0.3rem; top: 1.05rem; width: 6px; height: 6px; background: var(--border-strong); border-radius: 50%; }
+.checklist li.done::before, .check-row.done::before { left: 0; top: 0.75rem; width: 14px; height: 14px; border-radius: 4px; }
 .checklist li.done::before, .check-row.done::before { background: var(--brand) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='white' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m4 8.5 2.5 2.5L12 5.5'/%3E%3C/svg%3E") center / 12px no-repeat; border-color: var(--brand); }
 .checklist li.done, .check-row.done { color: var(--muted); }
 .checklist-card:not(.card) { margin: 0 0 1.5rem; overflow: hidden; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
@@ -642,7 +648,8 @@ a.stat:hover::after { opacity: 1; transform: none; }
 .prose .table-wrap table { margin: 0; }
 .prose hr { margin: 2em 0; }
 .prose img { border-radius: var(--radius-sm); }
-.prose li.task { margin-left: -1.35em; list-style: none; }
+.prose li.task { margin-left: -1.35em; padding-left: 1.45em; text-indent: -1.45em; list-style: none; }
+.prose li.task > * { text-indent: 0; }
 .prose li.task.done { color: var(--muted); }
 li.task .tick { margin-right: 0.2rem; color: var(--faint); }
 li.task.done .tick { color: var(--green); }
@@ -722,6 +729,14 @@ body.public { background: var(--paper); }
 .auth-card .form-actions { margin-top: 1.25rem; }
 .auth-card .form-actions .btn-primary { flex: 1; min-height: 42px; }
 .auth-foot { margin: 1.25rem 0 0; font-size: 0.875rem; color: var(--muted); text-align: center; }
+.auth-split { display: grid; grid-template-columns: minmax(0, 27rem) minmax(0, 21rem); gap: clamp(2rem, 6vw, 4.5rem); align-items: center; justify-content: center; width: 100%; }
+.auth-main .auth-card { max-width: none; }
+.auth-aside h2 { margin: 0 0 1.1rem; font-family: var(--font); font-size: 1.0625rem; font-weight: 600; letter-spacing: -0.01em; }
+.auth-points { display: grid; gap: 0.95rem; margin: 0; padding: 0; font-size: 0.9375rem; line-height: 1.5; list-style: none; color: var(--text-2); }
+.auth-points li { display: flex; align-items: flex-start; gap: 0.7rem; }
+.auth-points .icon { width: 18px; height: 18px; margin-top: 0.1rem; color: var(--brand); stroke-width: 2; }
+.auth-note { margin: 1.4rem 0 0; padding-top: 1.1rem; font-size: 0.875rem; color: var(--muted); border-top: 1px solid var(--border); }
+@media (max-width: 860px) { .auth-split { grid-template-columns: minmax(0, 27rem); } }
 @media (max-width: 520px) { .auth-card { padding: 1.6rem 1.3rem; } .auth-wrap { padding-top: 2rem; } }
 
 /* Error pages */
@@ -746,3 +761,10 @@ body.print-page { background: #edece7; }
 .plan-toc { padding: 1rem 1.15rem; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm); }
 .plan-toc a.active { font-weight: 600; color: var(--ink); }
 @media (max-width: 640px) { .doc { min-height: 0; padding: 1.5rem 1.25rem; } }
+/* Statements and letters: keep money and dates on one line and fit A4 width. */
+.doc .table { font-size: 0.8125rem; }
+.doc .table th, .doc .table td { padding: 0.45rem 0.5rem; }
+.doc .table th:first-child, .doc .table td:first-child { padding-left: 0.5rem; }
+.doc .table th:last-child, .doc .table td:last-child { padding-right: 0.5rem; }
+.doc .table td { white-space: nowrap; }
+.doc .table th { white-space: normal; vertical-align: bottom; }
