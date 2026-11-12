@@ -1,10 +1,10 @@
 // Signed-in pages: dashboard, chase list and board, calendar feed, compose and send, letters, statements and reports.
 import { HttpError, addDays, daysBetween, fmtDateUK, fmtGBP, isEmail, isISODate, mdToHtml, nowISO, renderMerge, round2, todayISO, randomToken } from '../../../core/util.js';
-import { html, raw, card, stats, pageHeader, button, postButton, table, badge, alert, tabs, barChart, csrfField, attrs, emptyState } from '../../../core/ui.js';
+import { html, raw, join, card, stats, pageHeader, button, postButton, table, badge, alert, tabs, barChart, csrfField, attrs, emptyState } from '../../../core/ui.js';
 import { appPage, printPage } from '../../../core/layout.js';
 import { requireRole, can } from '../../../core/crud.js';
 import { allInvoices, base, nextBadge, templateFor, requireFound, CONSUMER } from '../resources.js';
-import { STAGES, stageLabel, whenLabel, ladderBands, daysLabel } from '../lib/ladder.js';
+import { STAGES, SKIPPED, stageLabel, whenLabel, ladderBands, daysLabel } from '../lib/ladder.js';
 import { mergeValues, unfilled, instalments, MERGE_FIELDS } from '../lib/templates.js';
 import { rateCheck, fmtShort } from '../lib/calc.js';
 import { SOURCES } from '../lib/docs.js';
@@ -279,14 +279,18 @@ function merged(ctx, { inv, customer, log }, tpl, src = {}) {
 function warnings(ctx, { inv, customer }, tpl, text) {
   const out = [];
   // A merge field that found no value needs details adding. Any other bracketed wording (Template 3's optional clause) is the writer's to keep or cut.
+  // Each bracket is listed once: empty merge fields under "Still in brackets", optional wording in its own sentence.
   const known = new Set(MERGE_FIELDS.map((f) => f.toLowerCase()));
   const brackets = unfilled(text);
   const optional = brackets.filter((g) => !known.has(g.trim().toLowerCase()));
-  if (brackets.length) {
-    const advice = [];
-    if (optional.length < brackets.length) advice.push(html`Fill the missing details in below, or add them in <a href="/app/settings">Settings</a> or on the customer so they fill in next time.`);
-    if (optional.length) advice.push(html`${optional.map((g) => html`<code>[${g}]</code> `)}${optional.length === 1 ? 'is' : 'are'} optional wording: keep ${optional.length === 1 ? 'it' : 'them'} or delete ${optional.length === 1 ? 'it' : 'them'}, brackets included.`);
-    out.push(alert(html`Still in brackets: ${brackets.map((g) => html`<code>[${g}]</code> `)}. ${advice.map((a) => html`${a} `)}`, 'orange', 'Check before sending.'));
+  const missing = brackets.filter((g) => known.has(g.trim().toLowerCase()));
+  const codes = (list) => join(list.map((g) => html`<code>[${g}]</code>`), ' ');
+  // A phone script is read aloud, not sent, and its [date] is a blank to fill in on the call.
+  if (brackets.length && tpl.channel !== 'Phone script') {
+    const notes = [];
+    if (missing.length) notes.push(html`Still in brackets: ${codes(missing)}. Fill the missing details in below, or add them in <a href="/app/settings">Settings</a> or on the customer so they fill in next time.`);
+    if (optional.length) notes.push(html`${codes(optional)} ${optional.length === 1 ? 'is' : 'are'} optional wording: keep ${optional.length === 1 ? 'it' : 'them'} or delete ${optional.length === 1 ? 'it' : 'them'}, brackets included.`);
+    out.push(alert(html`${notes.map((a) => html`${a} `)}`, 'orange', 'Check before sending.'));
   }
   if (tpl.review) out.push(alert('Have a solicitor check this template before you first use it. It is general wording, not legal advice.', 'yellow', 'Solicitor review.'));
   if (inv.status === 'Disputed') out.push(alert('This invoice is disputed. Don\'t chase the disputed amount as if it were simply late: ask for the undisputed part instead.', 'orange'));
@@ -305,7 +309,7 @@ function figuresCard(inv) {
   const rc = rateCheck(f.reference, { claim: inv.claim_on ?? inv.claim_interest, daysOverdue: f.daysOverdue });
   return card({
     title: 'Figures',
-    body: html`<div class="figures">${item('Amount', gbp(f.amount))}${item('Paid so far', gbp(f.paid))}${item('Balance', gbp(f.balance))}${item('Days overdue', String(f.daysOverdue), f.daysOverdue ? 'orange' : null)}${
+    body: html`<div class="figures">${item('Amount', gbp(f.amount))}${item('Paid so far', gbp(f.paid))}${item('Balance', gbp(f.balance))}${f.credit > 0 ? item('Credit (overpaid)', gbp(f.credit), 'purple') : ''}${item('Days overdue', String(f.daysOverdue), f.daysOverdue ? 'orange' : null)}${
       item('Statutory interest', gbp(f.interest))}${item('Daily interest', gbp(f.dailyInterest))}${item('Fixed compensation', gbp(f.fixedSum))}${item('Total due', gbp(f.totalDue), f.claimable ? 'red' : null)
     }</div><p class="small"><span class="tone-dot text-${rc.tone}" aria-hidden="true">●</span> ${rc.text}${f.claim ? html` · ${f.annualRate}% a year` : ''}</p>`,
   });
@@ -323,6 +327,7 @@ export function invoiceDetail(ctx, inv) {
   const notes = [];
   if (inv.customer_type === CONSUMER && inv.claim_interest) notes.push(alert('This customer is marked as a consumer. Statutory interest only applies between businesses.', 'red'));
   if (inv.customer_type === 'Sole trader' && inv.days_overdue >= base(ctx).L.stage4_from && live(inv)) notes.push(alert('Sole trader: the Pre-Action Protocol for Debt Claims applies before any court claim.', 'orange'));
+  if (inv.fig.credit > 0) notes.push(alert(`The customer has paid ${gbp(inv.fig.credit)} more than this invoice. Refund it, or set it against their next invoice, and it also shows as a credit on their statement.`, 'blue', 'Overpaid.'));
   const next = card({
     title: 'Next action',
     body: html`<p class="lead">${badge(n.label, n.tone)}${n.on && !['closed', 'paid-late'].includes(n.kind) ? html` <span class="muted">${whenLabel(n.on, n.today)}${n.on !== n.today ? ` (${fmtShort(n.on)})` : ''}</span>` : ''}</p>${notes}${buttons.length ? html`<div class="page-actions">${buttons}</div>` : ''}`,
@@ -347,7 +352,7 @@ export function customerDetail(ctx, c) {
   return html`${card({
     title: 'Credit check',
     body: html`<p>${badge(c.credit_check, c.credit_tone)}</p>${stop}<div class="figures">${item('Outstanding', gbp(c.outstanding))}${item('Overdue', gbp(c.overdue))}${item('Credit limit', c.credit_limit === null || c.credit_limit === undefined ? '—' : gbp(c.credit_limit))}${
-      item('Headroom', headroom === null ? '—' : gbp(headroom))}${item('Oldest overdue', c.oldest_overdue ? `${c.oldest_overdue} days` : '—')}${item('Average days late', c.avg_days_late === null ? '—' : String(c.avg_days_late))}${item('Claimable', gbp(c.claimable))
+      item('Headroom', headroom === null ? '—' : gbp(headroom))}${item('Oldest overdue', c.oldest_overdue ? `${c.oldest_overdue} days` : '—')}${item('Average days late', c.avg_days_late === null ? '—' : String(c.avg_days_late))}${item('Claimable', gbp(c.claimable))}${c.credit > 0 ? item('Credit held', gbp(c.credit)) : ''
     }</div>`,
   })}`;
 }
@@ -399,14 +404,18 @@ export function emailFooter(ctx) {
   return `Sent with ${ctx.definition.name}, credit control for UK small businesses: ${ctx.services.config.BASE_URL}`;
 }
 
-/** Skipping in "work through the list" mode pushes that invoice's action to tomorrow by logging a follow-up date. */
+/**
+ * Skipping in "work through the list" mode pushes that invoice's action to tomorrow by logging a follow-up date.
+ * The row's outcome is Skipped, which the ladder, "Last contact" and the reports treat as no contact at all.
+ */
 export function chaseSkip(ctx) {
   // A POST (with the compose form's CSRF token) because it writes to the chase log.
   requireRole(ctx, 'member');
   const { resources } = ctx.services;
   const inv = resources.find(ctx, resources.get('invoices'), ctx.params.id);
-  const t = base(ctx).today;
-  logContact(ctx, inv, { channel: 'Other', outcome: 'Other', next_follow_up: addDays(t, 1), notes: 'Skipped while working through the chase list.' });
+  if (live(inv)) {
+    logContact(ctx, inv, { channel: 'Other', outcome: SKIPPED, next_follow_up: addDays(base(ctx).today, 1), notes: 'Skipped while working through the chase list. No contact was made.' });
+  }
   return { redirect: '/app/chase/next' };
 }
 
