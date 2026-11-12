@@ -26,7 +26,7 @@ export const CORE_PUBLIC = path.join(path.dirname(fileURLToPath(import.meta.url)
 const isTrue = (v) => /^(1|true|yes|on)$/i.test(String(v ?? '').trim());
 const UNSAFE = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 // Paths that still accept changes when a workspace is read only (trial ended or payment failed).
-const READ_ONLY_OK = [/^\/app\/billing(\/|$)/, /^\/app\/account(\/|$)/, /^\/app\/switch$/, /^\/app\/settings\/delete$/, /^\/app\/team\/leave$/];
+const READ_ONLY_OK = [/^\/app\/billing(\/|$)/, /^\/app\/account(\/|$)/, /^\/app\/switch$/, /^\/app\/settings\/delete$/, /^\/app\/team\/leave$/, /^\/app\/settings\/api-keys\/\d+\/revoke$/, /^\/app\/founder(\/|$)/];
 // Form errors that send people back to the page they came from with a red message.
 const BACK_STATUSES = new Set([400, 402, 403, 409, 410, 413, 415, 422, 429]);
 const toHtml = (v) => (typeof v === 'string' ? v : render(v));
