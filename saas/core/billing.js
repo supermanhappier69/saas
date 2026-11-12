@@ -1,6 +1,6 @@
 // Plans, trials, limits and Stripe billing (Checkout, customer portal, signed webhooks).
 import crypto from 'node:crypto';
-import { HttpError, nowISO, todayISO, daysBetween } from './util.js';
+import { HttpError, nowISO, todayISO, daysBetween, round2 } from './util.js';
 
 const STRIPE_API = ['https:', '', 'api.stripe.com', 'v1', ''].join('/');
 
@@ -59,25 +59,58 @@ export function createBilling({ db, config, definition }) {
     return body;
   }
 
+  /** The one-off plan this workspace has already paid for, if any. */
+  const paidOneOff = (org) => {
+    const p = org.plan_status === 'active' && !org.is_demo ? planById(org.plan) : null;
+    return p?.oneOff ? p : null;
+  };
+
+  /**
+   * What buying a one-off plan costs a workspace that has already paid for a cheaper one: only the difference.
+   * Returns { from, amount } or null when it is a normal purchase (or the plan is already owned: see owns()).
+   */
+  function upgrade(org, planId) {
+    const plan = planById(planId);
+    const have = paidOneOff(org);
+    if (!plan?.oneOff || !have || have.id === plan.id || (have.price || 0) >= (plan.price || 0)) return null;
+    return { from: have, amount: round2(plan.price - (have.price || 0)) };
+  }
+  /** True when the workspace has paid for a one-off plan that is this one or a better one, so buying it again would charge twice. */
+  const owns = (org, planId) => {
+    const plan = planById(planId);
+    const have = paidOneOff(org);
+    return Boolean(plan?.oneOff && have && (have.price || 0) >= (plan.price || 0));
+  };
+
   async function checkout(org, user, planId) {
     const plan = planById(planId);
     if (!plan || !plan.price) throw new HttpError(400, 'Choose a paid plan.');
     const price = priceId(plan);
     if (!price) throw new HttpError(503, `Online payments for this plan are not set up yet (missing STRIPE_PRICE_${plan.id.toUpperCase()}).`);
+    if (owns(org, plan.id)) {
+      const have = paidOneOff(org);
+      throw new HttpError(409, have.id === plan.id ? `You have already paid for the ${plan.name} plan.` : `You have already paid for the ${have.name} plan, which includes everything in ${plan.name}.`);
+    }
+    const up = upgrade(org, plan.id);
+    const meta = { org_id: String(org.id), plan: plan.id, ...(up ? { upgrade_from: up.from.id } : {}) };
+    // An upgrade is charged as the difference between the two prices, which no configured Stripe price holds, so it is priced inline.
+    const item = up
+      ? { price_data: { currency: 'gbp', unit_amount: Math.round(up.amount * 100), product_data: { name: `${plan.name} plan (upgrade from ${up.from.name})` } }, quantity: 1 }
+      : { price, quantity: 1 };
     const common = {
-      line_items: [{ price, quantity: 1 }],
+      line_items: [item],
       success_url: `${config.BASE_URL}/app/billing?checkout=success`,
       cancel_url: `${config.BASE_URL}/app/billing?checkout=cancelled`,
       client_reference_id: String(org.id),
       customer: org.stripe_customer || undefined,
       customer_email: org.stripe_customer ? undefined : user.email,
       allow_promotion_codes: 'true',
-      metadata: { org_id: String(org.id), plan: plan.id },
+      metadata: meta,
     };
     // One-off plans are a single payment: no subscription, and Stripe issues an invoice as the receipt.
     const session = plan.oneOff
-      ? await stripe('checkout/sessions', { mode: 'payment', ...common, customer_creation: org.stripe_customer ? undefined : 'always', invoice_creation: { enabled: 'true' }, payment_intent_data: { metadata: { org_id: String(org.id), plan: plan.id } } })
-      : await stripe('checkout/sessions', { mode: 'subscription', ...common, subscription_data: { metadata: { org_id: String(org.id), plan: plan.id } } });
+      ? await stripe('checkout/sessions', { mode: 'payment', ...common, customer_creation: org.stripe_customer ? undefined : 'always', invoice_creation: { enabled: 'true' }, payment_intent_data: { metadata: meta } })
+      : await stripe('checkout/sessions', { mode: 'subscription', ...common, subscription_data: { metadata: meta } });
     return session.url;
   }
 
@@ -130,6 +163,10 @@ export function createBilling({ db, config, definition }) {
       if (orgId) {
         switch (event.type) {
           case 'checkout.session.completed':
+            // Delayed methods (a bank debit) complete the session before any money has arrived: wait for async_payment_succeeded.
+            if (obj.payment_status === 'unpaid') break;
+          // falls through
+          case 'checkout.session.async_payment_succeeded':
             db.run("UPDATE orgs SET plan = COALESCE(?, plan), plan_status = 'active', stripe_customer = COALESCE(?, stripe_customer), stripe_subscription = COALESCE(?, stripe_subscription) WHERE id = ?",
               planById(obj.metadata?.plan) ? obj.metadata.plan : null, obj.customer || null, obj.subscription || null, orgId);
             break;
@@ -166,5 +203,5 @@ export function createBilling({ db, config, definition }) {
     db.run("UPDATE orgs SET plan = ?, plan_status = 'active' WHERE id = ?", planId, org.id);
   }
 
-  return { plans, enabled, planById, planFor, effectivePlan, access, limit, can, checkout, portal, verifyWebhook, applyEvent, simulate, priceId };
+  return { plans, enabled, planById, planFor, effectivePlan, access, limit, can, checkout, upgrade, owns, portal, verifyWebhook, applyEvent, simulate, priceId };
 }
