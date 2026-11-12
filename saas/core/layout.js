@@ -3,9 +3,9 @@ import { html, raw, attrs, render, flashes, alert, button, csrfField, postButton
 import { roleRank, ROLE_LABELS } from './auth.js';
 import { icon, hasIcon } from './icons.js';
 
-export const ASSET_VERSION = '2.0.0';
+export const ASSET_VERSION = '3.0.0';
 
-export function documentShell(def, { title, description = '', body, bodyClass = '', styles = [], preloadDisplay = false }) {
+export function documentShell(def, { title, description = '', body, bodyClass = '', styles = [], preloadDisplay = false, canonical = null, image = null, jsonLd = null }) {
   const theme = def.theme?.css ? html`<link rel="stylesheet" href="/static/${def.theme.css}?v=${ASSET_VERSION}">` : '';
   const icon = def.theme?.favicon ? `/static/${def.theme.favicon}` : '/assets/favicon.svg';
   const extra = styles.map((href) => html`<link rel="stylesheet" href="${href}?v=${ASSET_VERSION}">`);
@@ -16,7 +16,12 @@ export function documentShell(def, { title, description = '', body, bodyClass = 
   return `<!doctype html>\n${render(html`<html lang="en-GB"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${title}</title>${
     description ? html`<meta name="description" content="${description}">` : ''
   }${
-    description ? html`<meta property="og:site_name" content="${def.name}"><meta property="og:type" content="website"><meta property="og:title" content="${title}"><meta property="og:description" content="${description}"><meta name="twitter:card" content="summary">` : ''
+    description ? html`<meta property="og:site_name" content="${def.name}"><meta property="og:type" content="website"><meta property="og:title" content="${title}"><meta property="og:description" content="${description}">${
+      canonical ? html`<meta property="og:url" content="${canonical}">` : ''
+    }${image ? html`<meta property="og:image" content="${image}"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">` : ''}<meta name="twitter:card" content="${image ? 'summary_large_image' : 'summary'}">` : ''
+  }${canonical ? html`<link rel="canonical" href="${canonical}">` : ''}${
+    // A data block, not a script: CSP doesn't apply, and '<' is escaped so the JSON can't close the tag.
+    jsonLd ? raw(`<script type="application/ld+json">${JSON.stringify(jsonLd).replace(/</g, '\\u003c')}</script>`) : ''
   }<meta name="theme-color" content="${def.theme?.color || '#0f5f4a'}"><link rel="icon" href="${icon}" type="image/svg+xml">${preload}<link rel="stylesheet" href="/assets/core.css?v=${ASSET_VERSION}">${extra}${theme}<link rel="stylesheet" href="/assets/print.css?v=${ASSET_VERSION}" media="print"><script src="/assets/core.js?v=${ASSET_VERSION}" defer></script></head><body${attrs({ class: bodyClass || null })}>${body}</body></html>`)}`;
 }
 
@@ -29,7 +34,10 @@ const DEFAULT_FOOTER = [
   { title: 'Legal', links: [{ label: 'Terms', href: '/terms' }, { label: 'Privacy', href: '/privacy' }] },
 ];
 
-export function publicPage(def, ctx, { title = null, description = null, body, narrow = false }) {
+export function publicPage(def, ctx, { title = null, description = null, body, narrow = false, jsonLd = null }) {
+  const base = ctx?.services?.config?.BASE_URL || '';
+  const canonical = base ? `${base}${ctx.path || '/'}` : null;
+  const image = base && def.theme?.ogImage ? `${base}/static/${def.theme.ogImage}` : null;
   const links = def.marketing?.nav || [{ label: 'Features', href: '/#features' }, { label: 'Pricing', href: '/pricing' }, { label: 'Demo', href: '/demo' }];
   const ctaLabel = def.marketing?.cta || 'Start free trial';
   const here = ctx?.path || '';
@@ -53,14 +61,20 @@ export function publicPage(def, ctx, { title = null, description = null, body, n
     bodyClass: 'public',
     styles: ['/assets/marketing.css'],
     preloadDisplay: true,
+    canonical,
+    image,
+    jsonLd,
     body: html`<a class="skip" href="#main">Skip to content</a>${header}<main id="main"${attrs({ class: narrow ? 'public-main container narrow' : 'public-main' })}>${flashes(ctx?.flash)}${body}</main>${footer}`,
   });
 }
 
-export function authPage(def, ctx, { title, intro = null, body, footer = null }) {
+export function authPage(def, ctx, { title, intro = null, body, footer = null, aside = null }) {
+  const card = html`<div class="auth-card"><h1>${title}</h1>${intro ? html`<p class="muted">${intro}</p>` : ''}${body}</div>${footer ? html`<p class="auth-foot">${footer}</p>` : ''}`;
   return publicPage(def, ctx, {
     title,
-    body: html`<div class="auth-wrap"><div class="auth-card"><h1>${title}</h1>${intro ? html`<p class="muted">${intro}</p>` : ''}${body}</div>${footer ? html`<p class="auth-foot">${footer}</p>` : ''}</div>`,
+    body: aside
+      ? html`<div class="auth-wrap auth-wrap-split"><div class="auth-split"><div class="auth-main">${card}</div><aside class="auth-aside">${aside}</aside></div></div>`
+      : html`<div class="auth-wrap">${card}</div>`,
   });
 }
 
