@@ -19,6 +19,10 @@ export function stageNumber(label) {
   return m ? Number(m[1]) : null;
 }
 
+/** Outcome of a chase log row made by "Skip this one": it defers the next action a day but is not a contact with the customer. */
+export const SKIPPED = 'Skipped';
+export const isContact = (row) => row.outcome !== SKIPPED;
+
 export const DEFAULT_LADDER = { pre_due_days: 3, stage2_from: 8, stage3_from: 15, stage4_from: 31, stage5_from: 46 };
 
 /** Ladder timings from workspace settings, falling back to the kit's defaults and keeping them in order. */
@@ -75,12 +79,14 @@ export function nextAction(inv, fig, log, { today, L }) {
   if (inv.status === 'Written off') return out({ kind: 'closed', label: 'Written off' });
   if (fig.settled) {
     if (fig.paidLate && fig.claim && fig.claimable > 0) return out({ kind: 'paid-late', label: `Paid ${daysLabel(fig.daysOverdue)} late: £${fig.claimable.toFixed(2)} still claimable`, tone: 'purple' });
+    if (fig.credit > 0) return out({ kind: 'closed', label: `Paid, £${fig.credit.toFixed(2)} overpaid`, tone: 'purple' });
     return out({ kind: 'closed', label: 'Paid', tone: 'green' });
   }
   if (!inv.due_date) return out({ kind: 'setup', label: 'Add a due date', tone: 'orange', on: today });
   if (inv.status === 'Disputed') return out({ kind: 'dispute', label: 'Resolve the dispute before chasing', tone: 'orange', on: followUp(log) || today });
 
-  const sorted = [...log].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.id - b.id));
+  // Skipped rows only matter for the follow-up date below; they are not contacts, so they never count as the last contact or a stage done.
+  const sorted = log.filter(isContact).sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.id - b.id));
   const lastContact = sorted[sorted.length - 1] || null;
   const promise = inv.promised_date;
   if (promise && promise >= today) {
