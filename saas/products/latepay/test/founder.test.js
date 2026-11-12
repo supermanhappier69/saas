@@ -3,7 +3,7 @@ process.env.APP_TODAY = '2026-11-11';
 
 const { test, before, after } = await import('node:test');
 const assert = (await import('node:assert/strict')).default;
-const { startTestApp } = await import('../../../test/helpers.js');
+const { startTestApp, tokenFromOutbox } = await import('../../../test/helpers.js');
 const { definition } = await import('../definition.js');
 const { modelFor, metrics } = await import('../pages/founder.js');
 
@@ -24,6 +24,11 @@ async function signUp(details) {
 before(async () => {
   t = await startTestApp({ definition, env: { FOUNDER_EMAILS: 'Founder@Example.com' } });
   founder = await signUp({ name: 'Bobby Founder', email: 'founder@example.com', orgName: 'PaidOnTime Ltd', password: 'copper-kettle-77' });
+  // Being listed in FOUNDER_EMAILS is not enough (sign-up never checks an address): the console opens once the emailed link has been used.
+  assert.equal((await founder.get('/app/founder')).status, 403);
+  assert.equal((await founder.post('/app/founder/verify')).status, 303);
+  const link = tokenFromOutbox(t.db, 'founder@example.com', 'verify');
+  assert.equal((await founder.get(`/app/founder/verify/${link}`)).location, '/app/founder');
   other = await signUp({ name: 'Someone Else', email: 'else@example.com', orgName: 'Else Ltd', password: 'copper-kettle-78' });
   org = t.db.get("SELECT o.* FROM orgs o JOIN memberships m ON m.org_id = o.id JOIN users u ON u.id = m.user_id WHERE u.email = 'founder@example.com'");
 });

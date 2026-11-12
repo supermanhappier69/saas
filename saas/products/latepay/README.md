@@ -26,7 +26,7 @@ See `docs/LAUNCH.md`: a Dockerfile and `fly.toml` are included, tests run in Git
 cd saas
 npm run latepay                       # http://localhost:3101
 ALLOW_FAKE_BILLING=1 npm run latepay  # lets you switch plans without Stripe (development only)
-node products/latepay/server.js --run-jobs   # daily jobs once (Monday chase-list email), for cron
+node products/latepay/server.js --run-jobs   # daily jobs once (trial emails, Monday chase-list email), for cron
 node products/latepay/server.js --waitlist   # print the waitlist as CSV
 ```
 
@@ -69,7 +69,9 @@ Disputes, broken promises, payment plans and follow-up dates from the chase log 
 
 ## Files
 
-- `definition.js`: plans, settings, navigation, routes, landing page copy, sample data and the Monday job.
+- `definition.js`: plans, settings, navigation, routes, marketing copy (FAQ, plan table, signup panel), sample data and the daily job.
+- `pages/landing.js`: the landing page. Its product views are drawn in HTML and its worked example is computed by `lib/calc.js`.
+- `lifecycle.js`: the four trial emails (getting started, a summary of what you're owed, trial ending, trial ended), sent by the daily job and switched off per workspace in Settings.
 - `resources.js`: customers, invoices, payments, chase log, templates and reference rates, with computed figures and hooks.
 - `lib/`: `calc.js` (figures), `rates.js` (Bank Rate history), `ladder.js` (next actions), `templates.js`, `docs.js` (guides and policy), `sample.js`.
 - `pages/`: `app.js` (dashboard and onboarding, chase list, board, work-through mode, calendar feed, compose and send, letters, statements, reports), `guides.js` (guides, policy, calculator, waitlist), `free.js` (free template pages) and `founder.js` (the founder console).
