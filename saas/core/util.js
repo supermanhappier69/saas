@@ -51,9 +51,11 @@ export function addMonths(iso, n) {
 export const minDate = (...ds) => ds.filter(Boolean).sort()[0] || null;
 export const maxDate = (...ds) => ds.filter(Boolean).sort().slice(-1)[0] || null;
 
+/** Rounds to pence, half away from zero. toPrecision(15) drops binary noise (10.075 * 100 is 1007.4999999999999). */
 export function round2(n) {
   const x = Number(n) || 0;
-  return Math.round((x + (x >= 0 ? Number.EPSILON : -Number.EPSILON)) * 100) / 100;
+  const r = Math.round(Number((Math.abs(x) * 100).toPrecision(15))) / 100;
+  return x < 0 ? -r : r;
 }
 
 export const randomToken = (bytes = 32) => crypto.randomBytes(bytes).toString('base64url');
@@ -146,7 +148,19 @@ export function parseFlexibleDate(input) {
   return undefined;
 }
 
-/** "£1,250.50", "(20)", "-5" → number. null if empty, undefined if invalid. */
+/**
+ * Turns "1,250.50" (UK), "1.250,50" and "1250,50" (decimal comma, as in semicolon CSVs) into "1250.50".
+ * Returns null when commas appear where no thousands or decimal separator could be, so "1,2,3" is rejected rather than read as 123.
+ */
+function plainDecimal(s) {
+  if (!s.includes(',')) return s;
+  if (/^\d{1,3}(,\d{3})+(\.\d+)?$/.test(s)) return s.replace(/,/g, '');
+  if (/^\d{1,3}(\.\d{3})+,\d+$/.test(s)) return s.replace(/\./g, '').replace(',', '.');
+  if (/^\d+,\d{1,2}$/.test(s)) return s.replace(',', '.');
+  return null;
+}
+
+/** "£1,250.50", "1.250,50", "(20)", "-5" → number. null if empty, undefined if invalid. */
 export function parseMoney(input) {
   if (input === null || input === undefined) return null;
   if (typeof input === 'number') return Number.isFinite(input) ? round2(input) : undefined;
@@ -157,12 +171,13 @@ export function parseMoney(input) {
     neg = true;
     s = s.slice(1, -1);
   }
-  s = s.replace(/^GBP/i, '').replace(/[£$€\s,]/g, '');
+  s = s.replace(/^GBP/i, '').replace(/[£$€\s]/g, '');
   if (s.startsWith('-')) {
     neg = !neg;
     s = s.slice(1);
   }
-  if (!/^\d+(\.\d+)?$/.test(s) && !/^\.\d+$/.test(s)) return undefined;
+  s = plainDecimal(s);
+  if (s === null || (!/^\d+(\.\d+)?$/.test(s) && !/^\.\d+$/.test(s))) return undefined;
   const v = round2(Number(s));
   return neg ? -v : v;
 }
@@ -170,10 +185,13 @@ export function parseMoney(input) {
 export function parseNumber(input) {
   if (input === null || input === undefined) return null;
   if (typeof input === 'number') return Number.isFinite(input) ? input : undefined;
-  const s = String(input).trim().replace(/,/g, '').replace(/%$/, '');
+  let s = String(input).trim().replace(/%$/, '').trim();
   if (!s) return null;
-  if (!/^-?(\d+(\.\d+)?|\.\d+)$/.test(s)) return undefined;
-  return Number(s);
+  const neg = s.startsWith('-');
+  if (neg) s = s.slice(1);
+  s = plainDecimal(s);
+  if (s === null || (!/^\d+(\.\d+)?$/.test(s) && !/^\.\d+$/.test(s))) return undefined;
+  return neg ? -Number(s) : Number(s);
 }
 
 /** Returns true, false, or null when the value isn't recognisable. Empty counts as false. */

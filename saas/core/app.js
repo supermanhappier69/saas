@@ -112,11 +112,21 @@ export function createApp(definition, options = {}) {
   const files = createFiles({ db, config });
   const mailer = createMailer({ db, config, definition: def, log });
   const billing = createBilling({ db, config, definition: def });
+  if (config.NODE_ENV === 'production') {
+    if (mailer.provider !== 'log' && !config.MAIL_FROM) log.warn?.('MAIL_FROM is not set, so every email will be sent from an address the provider rejects. Set it to a verified sender, for example "' + def.name + ' <hello@yourdomain>".');
+    if (config.ALLOW_FAKE_BILLING) log.warn?.('ALLOW_FAKE_BILLING is on in production: anyone who owns a workspace can switch to a paid plan without paying (test billing is ignored once Stripe is configured).');
+  }
   const limiter = options.rateLimit === false ? null : createRateLimiter();
   const services = { config, db, definition: def, auth, resources, csv, files, mailer, billing, limiter, log };
   services.deleteOrg = (orgId) => {
     files.removeOrg(orgId);
-    db.run('DELETE FROM orgs WHERE id = ?', orgId);
+    db.tx(() => {
+      // These tables have no foreign key to orgs, so without this they would keep customer emails and live invitations.
+      db.run('DELETE FROM outbox WHERE org_id = ?', orgId);
+      db.run('DELETE FROM tokens WHERE org_id = ?', orgId);
+      db.run('DELETE FROM kv WHERE key LIKE ? OR key LIKE ?', `job:daily:${orgId}:%`, `onboard:${orgId}:%`);
+      db.run('DELETE FROM orgs WHERE id = ?', orgId);
+    });
     try {
       db.run("DELETE FROM users WHERE email LIKE '%@demo.invalid' AND id NOT IN (SELECT user_id FROM memberships)");
     } catch (err) {

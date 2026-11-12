@@ -1,6 +1,6 @@
 // PaidOnTime: the UK Late Payment & Credit Control Kit as a working app on the shared core.
 import { HttpError, addDays, todayISO, fmtGBP, fmtDateUK } from '../../core/util.js';
-import { html, badge } from '../../core/ui.js';
+import { html } from '../../core/ui.js';
 import { BUSINESS_FIELDS } from '../../core/workspace.js';
 import { buildResources, seedTemplates, allInvoices, base } from './resources.js';
 import { seedSamples } from './lib/sample.js';
@@ -12,6 +12,8 @@ import {
 import { guidePage, guidePrint, policyPage, policySave, policyPrint, publicCalculator, waitlistGet, waitlistPost } from './pages/guides.js';
 import { freePage, freeTermsPage } from './pages/free.js';
 import { registerFounder, isFounder } from './pages/founder.js';
+import { landingBody } from './pages/landing.js';
+import { registerSearch } from '../../core/search.js';
 
 const resources = buildResources();
 const R = Object.fromEntries(resources.map((r) => [r.name, r]));
@@ -28,7 +30,7 @@ const SETTINGS_FIELDS = [
   { key: 'bank_details', label: 'Bank details for payments', type: 'textarea', rows: 3, max: 400, group: 'Your business', help: 'Account name, sort code and account number. Filled into [Bank details].' },
   { key: 'payment_link', label: 'Online payment link', type: 'url', group: 'Your business', help: 'Optional. Filled into [Payment link].' },
   { key: 'default_terms', label: 'Standard payment terms (days)', type: 'int', min: 0, max: 120, required: true, group: 'Credit control' },
-  { key: 'stop_days', label: 'Pause work when an invoice is this many days overdue', type: 'int', min: 1, max: 365, required: true, group: 'Credit control' },
+  { key: 'stop_days', label: 'Pause work when an invoice is more than this many days overdue', type: 'int', min: 1, max: 365, required: true, group: 'Credit control' },
   { key: 'weekly_digest', label: 'Email admins the chase list every Monday morning', type: 'bool', group: 'Credit control' },
   { key: 'email_footer', label: 'Add “Sent with PaidOnTime” to the end of reminder emails (removed on the Complete plan)', type: 'bool', group: 'Credit control' },
   { key: 'pre_due_days', label: 'Pre-due reminder: days before the due date', type: 'int', min: 0, max: 30, required: true, group: 'Chase ladder (days overdue each stage starts)' },
@@ -38,17 +40,21 @@ const SETTINGS_FIELDS = [
   { key: 'stage5_from', label: 'Stage 5, letter before action', type: 'int', min: 5, max: 400, required: true, group: 'Chase ladder (days overdue each stage starts)' },
 ];
 
-const tick = '✓';
+// The mark: a clock face whose hands form a tick. Colours come from the theme via the logo-* classes.
+const LOGO_SVG = '<svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg"><rect class="logo-bg" width="32" height="32" rx="8"/><circle class="logo-fg" cx="16" cy="16" r="9.4" fill="none" stroke-width="2.1"/><path class="logo-fg" d="m11.4 15.2 3.9 3.9 6.3-7.2" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
 export const definition = {
   slug: 'latepay',
   name: 'PaidOnTime',
   logoText: '£',
+  logoSvg: LOGO_SVG,
+  search: { placeholder: 'Search customers and invoices' },
+  quickCreate: { label: 'New invoice', href: '/app/invoices/new' },
   tagline: 'Credit control for UK small businesses',
   description: 'A chase calendar, ready-to-send reminders and letters, and the statutory interest and compensation UK law lets you claim, worked out for every late invoice.',
   port: 3101,
   publicDir: new URL('./public/', import.meta.url),
-  theme: { css: 'theme.css', color: '#0f6e5c' },
+  theme: { css: 'theme.css', color: '#0f5f4a', favicon: 'favicon.svg' },
   trialDays: 14,
   trialPlan: 'complete',
   demoOrgName: 'Demo Joinery & Fit-out Ltd',
@@ -68,6 +74,19 @@ export const definition = {
   ],
   defaultSettings: { default_terms: 30, stop_days: 30, weekly_digest: true, email_footer: true, ...DEFAULT_LADDER },
   settingsFields: SETTINGS_FIELDS,
+  // The ladder silently reorders out-of-order stages, so refuse them instead of saving numbers that aren't used.
+  validateSettings(values) {
+    const errors = {};
+    const order = [['stage2_from', 'Stage 2'], ['stage3_from', 'Stage 3'], ['stage4_from', 'Stage 4'], ['stage5_from', 'Stage 5']];
+    for (let i = 1; i < order.length; i++) {
+      const [key, label] = order[i];
+      const [prevKey, prevLabel] = order[i - 1];
+      const v = values[key];
+      const prev = values[prevKey];
+      if (Number.isInteger(v) && Number.isInteger(prev) && v <= prev) errors[key] = `${label} must start later than ${prevLabel} (day ${prev}).`;
+    }
+    return errors;
+  },
   resources,
   nav: (ctx) => [
     { id: 'dashboard', label: 'Dashboard', href: '/app' },
@@ -85,75 +104,15 @@ export const definition = {
   marketing: {
     cta: 'Start free trial',
     nav: [{ label: 'How it works', href: '/#how' }, { label: 'Pricing', href: '/pricing' }, { label: 'Free calculator', href: '/calculator' }, { label: 'Free templates', href: '/free/payment-reminder-templates' }, { label: 'Demo', href: '/demo' }],
-    eyebrow: 'Credit control for UK businesses that invoice other businesses',
-    headline: 'Get paid on time, and know exactly what you\'re owed when you\'re not.',
-    subhead: 'PaidOnTime tells you what to send next for every unpaid invoice, writes the email or letter for you, and works out the statutory interest and compensation UK law lets you claim: 8% plus the base rate and £40–£100 per invoice.',
-    reassurance: '14-day free trial. No card needed. One price after that, no subscription.',
+    landing: (ctx) => landingBody(ctx),
+    featuredLabel: 'Recommended',
+    pricingHeadline: 'Pay once. Chase for good.',
     metaDescription: 'Credit control for UK small businesses: a chase calendar, ready-to-send reminders and letters, and statutory late payment interest and compensation worked out. One price, no subscription.',
-    heroPanel: html`<div class="card hero-card"><div class="card-head"><h2>Chase list · Monday</h2></div><div class="card-body"><ul class="action-list">${[
-      ['INV-1003', 'Northgate Events Ltd', '£12,500.00 · 63 days overdue', 'Letter before action', 'red'],
-      ['INV-1001', 'Brightside Joinery Ltd', '£2,400.00 · 41 days overdue', 'Chase the broken promise', 'red'],
-      ['INV-1002', 'Northgate Events Ltd', '£850.00 · 17 days overdue', 'Final notice', 'orange'],
-      ['INV-1005', 'Harbour Dental LLP', '£3,150.00 · due tomorrow', 'Pre-due reminder', 'blue'],
-    ].map(([n, c, meta, label, tone]) => html`<li class="action-item"><div><strong>${n}</strong> · ${c}<div class="action-meta">${meta}</div></div>${badge(label, tone)}</li>`)}</ul><p class="small muted">Claimable on INV-1003: £253.51 interest + £100 compensation (sample figures)</p></div></div>`,
-    problem: {
-      title: 'Late payment is costing you more than you think',
-      intro: 'Businesses hit by late payment spend 86 hours a year chasing and are owed £17,000 on average. Most chase when they remember, feel awkward doing it, and never claim what the law allows.',
-      points: [
-        'Chasing is ad hoc, so the customers who pay last get paid first.',
-        'Nobody knows which reminder went out, or what was promised on the phone.',
-        'You can claim 8% plus the Bank of England rate and up to £100 per invoice, but working out the figure and the wording takes time.',
-        'Credit control software costs £45 to £199+ a month and needs an accounting integration.',
-      ],
-    },
-    sections: [
-      {
-        id: 'stats',
-        title: 'The size of the problem',
-        body: html`<p class="section-intro">From research for the Department for Business and Trade and the Small Business Commissioner (London Economics, July 2025).</p><div class="kpi-grid">${[
-          ['£26bn', 'owed to UK businesses in late payments at any one time'],
-          ['14,000', 'businesses close every year because of late payment, 38 a day'],
-          ['86 hours', 'a year spent chasing, per affected business'],
-          ['£17,000', 'owed on average to each affected business'],
-        ].map(([v, l]) => html`<div class="kpi-card"><span class="kpi-value">${v}</span><span class="kpi-label">${l}</span></div>`)}</div><p class="section-intro small muted"><a href="https://www.smallbusinesscommissioner.gov.uk/late-payments-research-2/" rel="noopener noreferrer" target="_blank">Source: Late Payments Research, Office of the Small Business Commissioner</a></p>`,
-      },
-      {
-        id: 'law',
-        title: 'The law is on your side, and it is about to get stronger',
-        alt: true,
-        body: html`<p class="section-intro">The Late Payment of Commercial Debts (Interest) Act 1998 already lets any UK business claim statutory interest and a fixed sum on late business invoices. The Commercial Payments Bill, introduced to Parliament in May 2026, would make that interest mandatory and non-excludable, cap payment terms at 60 days and let the Small Business Commissioner fine persistent late payers.</p><div class="feature-grid">${[
-          ['8% + base rate', 'Statutory interest a year on the unpaid balance, from the day after the due date. PaidOnTime uses the right Bank of England reference rate automatically.'],
-          ['£40, £70 or £100', 'Fixed compensation per invoice, depending on its size. Claimable on top of interest.'],
-          ['The right wording', 'A final notice, an interest claim and a letter before action that set out the figures and the deadline properly. Solicitor review recommended before first use.'],
-        ].map(([t, x]) => html`<div class="feature"><h3>${t}</h3><p>${x}</p></div>`)}</div><p class="section-intro"><a href="/calculator">Work out what you are owed on an invoice now</a>.</p>`,
-      },
-      {
-        id: 'compare',
-        title: 'Why not a spreadsheet, a free calculator or credit control software?',
-        body: html`<div class="table-wrap"><table class="table"><thead><tr><th scope="col"></th><th scope="col">Spreadsheet</th><th scope="col">Free interest calculator</th><th scope="col">Credit control software</th><th scope="col">PaidOnTime</th></tr></thead><tbody>${[
-          ['Tells you what to send next, and when', '', '', tick, tick],
-          ['Reminder emails and letters written for you', '', '', tick, tick],
-          ['Statutory interest and fixed sum worked out', 'If you build it', tick, 'Some', tick],
-          ['Credit policy, SOP and weekly routine', '', '', '', tick],
-          ['Needs an accounting integration', '', '', 'Yes', 'No'],
-          ['Price', 'Free', 'Free', '£45–£199+ a month', '£49 or £99 once'],
-        ].map(([label, ...cells]) => html`<tr><th scope="row">${label}</th>${cells.map((c, i) => html`<td data-label="${['Spreadsheet', 'Free calculator', 'Credit control software', 'PaidOnTime'][i]}">${c || html`<span class="muted">—</span>`}</td>`)}</tr>`)}</tbody></table></div>`,
-      },
-    ],
-    featuresTitle: 'The whole chasing process, not just a calculator',
-    features: [
-      { icon: '📅', title: 'A chase calendar', text: 'Every invoice gets a next action and a date, from a pre-due reminder to a letter before action. Subscribe in Google or Outlook, and get the week\'s list every Monday.' },
-      { icon: '✉️', title: 'Emails and letters written for you', text: 'Six templates and a phone script, filled in with the right figures and dates. Edit, send and it\'s logged.' },
-      { icon: '£', title: 'What you can claim, worked out', text: 'Statutory interest with the correct Bank of England reference rate, part payments and the £40/£70/£100 fixed sum.' },
-      { icon: '🛑', title: 'Credit limits and account stops', text: 'See who is over their limit or long overdue, and when your policy says to pause work.' },
-      { icon: '📄', title: 'Your credit policy, done', text: 'Answer a few questions to get an internal credit policy, customer payment terms and invoice wording.' },
-      { icon: '📊', title: 'A 20-minute weekly routine', text: 'A credit control SOP, a board by chase stage and a monthly review that shows if chasing is working.' },
-    ],
-    stepsTitle: 'How it works',
-    steps: [
-      { title: 'Add customers and unpaid invoices', text: 'Type them in or import a CSV from Xero, QuickBooks, FreeAgent or Sage.' },
-      { title: 'Open the chase list on Monday', text: 'It shows what to send to whom, today. Calls and broken promises are flagged.' },
-      { title: 'Send, log, get paid', text: 'Send the reminder from the app, record payments, and claim interest when it\'s due.' },
+    footer: [
+      { title: 'Product', links: [{ label: 'How it works', href: '/#how' }, { label: 'Pricing', href: '/pricing' }, { label: 'Try the demo', href: '/demo' }, { label: 'Start free trial', href: '/signup' }] },
+      { title: 'Free tools', links: [{ label: 'Late payment calculator', href: '/calculator' }, { label: 'Reminder templates', href: '/free/payment-reminder-templates' }, { label: 'Letter before action', href: '/free/letter-before-action' }, { label: 'Payment terms', href: '/free/payment-terms' }] },
+      { title: 'Company', links: [{ label: 'Contact', href: '/contact' }, { label: 'Log in', href: '/login' }] },
+      { title: 'Legal', links: [{ label: 'Terms', href: '/terms' }, { label: 'Privacy', href: '/privacy' }] },
     ],
     faq: [
       { q: 'Is it legal to charge interest on late invoices?', a: 'Yes, between businesses. The Late Payment of Commercial Debts (Interest) Act 1998 lets you claim statutory interest at 8% a year plus the Bank of England reference rate, and fixed compensation of £40, £70 or £100 per invoice, unless your contract sets its own late-payment terms. It does not apply to consumer sales.' },
@@ -163,7 +122,6 @@ export const definition = {
       { q: 'Is this legal advice?', a: 'No. The templates and guides are general information based on official UK guidance. Have a solicitor check the interest claim, the letter before action and your payment terms before you first use them.' },
       { q: 'What does it cost?', a: 'A one-off £49 for Core or £99 for Complete, after a 14-day free trial of everything. No monthly subscription.' },
     ],
-    closing: { title: 'Try PaidOnTime free for 14 days', text: 'The demo is filled with sample invoices at every stage, so you can see the whole routine in two minutes.' },
     pricingIntro: 'One payment, no subscription. Start with a 14-day free trial of the Complete plan.',
     demoIntro: 'Open a private demo workspace with sample customers and invoices at every chase stage: pre-due, overdue, disputed, a broken promise, a payment plan and a letter before action.',
   },
@@ -178,6 +136,7 @@ export const definition = {
     seedSamples(ctx, todayISO(services.config.TIMEZONE));
   },
   routes(router) {
+    registerSearch(router);
     router.get('/calculator', publicCalculator);
     router.get('/waitlist', waitlistGet);
     router.post('/waitlist', waitlistPost);
@@ -190,7 +149,7 @@ export const definition = {
     router.get('/feed/:token.ics', icsFeed, { public: true });
     router.get('/app/chase', chaseList);
     router.get('/app/chase/next', chaseNext);
-    router.get('/app/chase/skip/:id', chaseSkip);
+    router.post('/app/chase/skip/:id', chaseSkip);
     router.get('/app/chase/board', chaseBoard);
     router.get('/app/chase/calendar', calendarPage);
     router.post('/app/chase/calendar/reset', resetFeed);

@@ -154,6 +154,7 @@ export const MIME = {
   '.csv': 'text/csv; charset=utf-8',
   '.pdf': 'application/pdf',
   '.webmanifest': 'application/manifest+json',
+  '.woff2': 'font/woff2',
 };
 
 export function securityHeaders(res, { https = false } = {}) {
@@ -204,7 +205,7 @@ export function serveFile(req, res, root, rel, { maxAge = 0 } = {}) {
 export function createRateLimiter() {
   const buckets = new Map();
   let lastSweep = Date.now();
-  return function hit(key, max, windowMs) {
+  function hit(key, max, windowMs) {
     const now = Date.now();
     if (now - lastSweep > 60000) {
       for (const [k, b] of buckets) if (b.reset < now) buckets.delete(k);
@@ -217,5 +218,7 @@ export function createRateLimiter() {
     }
     b.count++;
     if (b.count > max) throw new HttpError(429, 'Too many attempts. Please wait a few minutes and try again.');
-  };
+  }
+  hit.clear = (key) => buckets.delete(key);
+  return hit;
 }

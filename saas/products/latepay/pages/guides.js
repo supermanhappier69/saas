@@ -1,5 +1,5 @@
 // Guides (Start here, SOP, numbers), the credit policy builder, the interest calculator and the public waitlist.
-import { HttpError, addDays, fmtDateUK, fmtGBP, isEmail, mdToHtml, nowISO, parseFlexibleDate, parseMoney, parseNumber, todayISO } from '../../../core/util.js';
+import { HttpError, addDays, fmtDateUK, fmtGBP, isEmail, mdToHtml, nowISO, parseFlexibleDate, parseMoney, parseNumber, todayISO, toCSV } from '../../../core/util.js';
 import { html, raw, card, pageHeader, button, tabs, alert, table, recordForm, attrs } from '../../../core/ui.js';
 import { appPage, printPage, publicPage } from '../../../core/layout.js';
 import { requireRole, can } from '../../../core/crud.js';
@@ -46,13 +46,15 @@ function calculator(ctx, action) {
   const asked = q.amount !== undefined;
   const amount = parseMoney(q.amount);
   const due = parseFlexibleDate(q.due);
-  const until = parseFlexibleDate(q.until) || t;
+  const untilParsed = parseFlexibleDate(q.until);
+  const until = untilParsed || t;
   const override = q.rate !== undefined && String(q.rate).trim() !== '' ? parseNumber(q.rate) : null;
   const errors = [];
   if (asked) {
     if (!(amount > 0)) errors.push('Enter the amount owed.');
     if (!due) errors.push('Enter the date payment was due.');
-    if (due && until < due) errors.push('The "paid or checked on" date must be after the due date.');
+    if (q.until !== undefined && String(q.until).trim() !== '' && !untilParsed) errors.push('Enter a real date for "Paid or checked on", or leave it blank to use today.');
+    else if (due && until < due) errors.push('The "paid or checked on" date can\'t be before the due date.');
     if (override !== null && !(override >= 0 && override <= 25)) errors.push('Enter a reference rate between 0 and 25, or leave it blank.');
   }
   const field = (name, label, value, extra = {}) => html`<div class="field"><label for="calc-${name}">${label}</label><input${attrs({ id: `calc-${name}`, name, value: value ?? '', ...extra })}></div>`;
@@ -68,9 +70,12 @@ function calculator(ctx, action) {
 }
 const round = (n) => Math.round(n * 100) / 100;
 
+// Object.hasOwn: a URL such as /app/guides/constructor must be a 404, not a lookup on Object.prototype.
+const docFor = (id) => (Object.hasOwn(DOCS, id) ? DOCS[id] : null);
+
 export function guidePage(ctx) {
   const id = ctx.params.doc || 'start';
-  const doc = DOCS[id];
+  const doc = docFor(id);
   if (!doc) throw new HttpError(404, 'Page not found');
   const actions = [button('Print', { href: `/app/guides/${id}/print`, size: 'sm' })];
   let extra = '';
@@ -87,7 +92,7 @@ export function guidePage(ctx) {
 }
 
 export function guidePrint(ctx) {
-  const doc = DOCS[ctx.params.doc];
+  const doc = docFor(ctx.params.doc);
   if (!doc) throw new HttpError(404, 'Page not found');
   return printPage(ctx, { title: doc.title, back: ctx.params.doc === 'start' ? '/app/guides' : `/app/guides/${ctx.params.doc}`, body: html`<h1>${doc.title}</h1><p class="muted">${ctx.org.settings?.company_name || ctx.org.name}</p>${md(doc.text(ctx))}` });
 }
@@ -194,12 +199,13 @@ export function waitlistPost(ctx) {
 /** `node server.js --waitlist` prints the waitlist as CSV, for the demand test. */
 export function waitlistCsv(db) {
   const rows = db.all("SELECT created_at, name, email, company, message, data FROM leads WHERE kind = 'waitlist' ORDER BY id");
-  const esc = (s) => `"${String(s ?? '').replace(/"/g, '""')}"`;
-  const out = [['Joined', 'Name', 'Email', 'Business', 'Staff', 'Invoices a month', 'Chases today with', 'Would pay', 'Notes'].map(esc).join(',')];
-  for (const r of rows) {
-    let d = {};
-    try { d = JSON.parse(r.data || '{}'); } catch { d = {}; }
-    out.push([r.created_at.slice(0, 10), r.name, r.email, r.company, d.staff, d.invoices, d.today, d.price, r.message].map(esc).join(','));
-  }
-  return `${out.join('\n')}\n`;
+  // toCSV also neutralises cells that start with = + - @ so a sign-up can't run a formula when the file is opened in Excel.
+  return toCSV(
+    ['Joined', 'Name', 'Email', 'Business', 'Staff', 'Invoices a month', 'Chases today with', 'Would pay', 'Notes'],
+    rows.map((r) => {
+      let d = {};
+      try { d = JSON.parse(r.data || '{}'); } catch { d = {}; }
+      return [r.created_at.slice(0, 10), r.name, r.email, r.company, d.staff, d.invoices, d.today, d.price, r.message];
+    }),
+  );
 }

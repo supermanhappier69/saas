@@ -1,10 +1,10 @@
 // Signed-in pages: dashboard, chase list and board, calendar feed, compose and send, letters, statements and reports.
-import { HttpError, addDays, daysBetween, fmtDateUK, fmtGBP, isEmail, mdToHtml, nowISO, renderMerge, round2, todayISO, randomToken } from '../../../core/util.js';
+import { HttpError, addDays, daysBetween, fmtDateUK, fmtGBP, isEmail, isISODate, mdToHtml, nowISO, renderMerge, round2, todayISO, randomToken } from '../../../core/util.js';
 import { html, raw, card, stats, pageHeader, button, postButton, table, badge, alert, tabs, barChart, csrfField, attrs, emptyState } from '../../../core/ui.js';
 import { appPage, printPage } from '../../../core/layout.js';
 import { requireRole, can } from '../../../core/crud.js';
 import { allInvoices, base, nextBadge, templateFor, requireFound, CONSUMER } from '../resources.js';
-import { STAGES, stageLabel, whenLabel, ladderBands } from '../lib/ladder.js';
+import { STAGES, stageLabel, whenLabel, ladderBands, daysLabel } from '../lib/ladder.js';
 import { mergeValues, unfilled, instalments, MERGE_FIELDS } from '../lib/templates.js';
 import { rateCheck, fmtShort } from '../lib/calc.js';
 import { SOURCES } from '../lib/docs.js';
@@ -12,6 +12,11 @@ import { SOURCES } from '../lib/docs.js';
 const live = (i) => !i.fig.settled && i.status !== 'Written off';
 export const isComplete = (ctx) => ctx.services.billing.can(ctx.org, 'complete');
 const gbp = (n) => fmtGBP(n || 0);
+/** "today", "tomorrow", "in 3 days" read mid-sentence; a date such as "15 Nov 2026" keeps its capital letter. */
+const inWords = (on, today) => {
+  const w = whenLabel(on, today);
+  return /^(Today|Tomorrow|Yesterday|In )/.test(w) ? w.charAt(0).toLowerCase() + w.slice(1) : w;
+};
 
 export function upgradeCard(ctx, what) {
   const admin = can(ctx, 'owner');
@@ -31,12 +36,23 @@ function actionItem(ctx, i, { showDate = false } = {}) {
     buttons.push(button('Log a call', { href: `/app/chases/new?invoice=${i.id}&channel=Phone${n.stage !== null ? `&stage=${encodeURIComponent(stageLabel(n.stage))}` : ''}`, size: 'sm' }));
   }
   return html`<li class="action-item"><div><a href="/app/invoices/${i.id}"><strong>${i.number}</strong></a> · ${i.customer__label || ''}<div class="action-meta">${gbp(i.balance)} · ${
-    i.days_overdue ? `${i.days_overdue} days overdue` : i.fig.daysToDue !== null ? `due ${whenLabel(i.due_date, n.today).toLowerCase()}` : ''
+    i.days_overdue ? `${daysLabel(i.days_overdue)} overdue` : i.fig.daysToDue !== null ? `due ${inWords(i.due_date, n.today)}` : ''
   }${showDate && n.on ? html` · ${whenLabel(n.on, n.today)}` : ''}</div><div>${badge(n.label, n.tone)}</div></div><div class="page-actions">${buttons}</div></li>`;
 }
 
 const actionList = (ctx, list, opts) => (list.length ? html`<ul class="action-list">${list.map((i) => actionItem(ctx, i, opts))}</ul>` : html`<p class="muted">Nothing to do here.</p>`);
 const byWhen = (a, b) => (a.next.on < b.next.on ? -1 : a.next.on > b.next.on ? 1 : (b.next.stage ?? -1) - (a.next.stage ?? -1));
+
+/**
+ * Reminder emails due now, in order, for "work through the list". Templates the plan doesn't include are left out:
+ * opening one shows an upgrade card with no way to skip, which would trap the queue.
+ */
+function dueEmails(ctx) {
+  const complete = isComplete(ctx);
+  return allInvoices(ctx)
+    .filter((i) => live(i) && i.next.now && i.next.template && i.next.template !== '5' && (complete || !templateFor(ctx, i.next.template)?.complete_only))
+    .sort(byWhen);
+}
 
 /** Setup steps for a new workspace, shown on the dashboard until every one is done. */
 export function onboarding(ctx) {
@@ -97,8 +113,8 @@ export function dashboard(ctx) {
     { label: 'Outstanding', value: gbp(sum(open)), hint: `${open.length} unpaid invoice${open.length === 1 ? '' : 's'}`, href: '/app/invoices', tone: 'blue' },
     { label: 'Overdue', value: gbp(sum(overdue)), hint: `${overdue.length} invoice${overdue.length === 1 ? '' : 's'}`, href: '/app/invoices?view=overdue', tone: overdue.length ? 'orange' : 'green' },
     { label: 'To chase now', value: String(now.length), hint: 'actions due today or earlier', href: '/app/chase', tone: now.length ? 'red' : 'green' },
-    { label: 'You can claim', value: gbp(claimable), hint: 'statutory interest and compensation', href: '/app/guides/numbers', tone: 'purple' },
-    { label: 'Broken promises', value: String(broken.length), href: '/app/invoices?view=promises', tone: broken.length ? 'red' : 'gray' },
+    { label: 'You can claim', value: gbp(claimable), hint: 'statutory interest and compensation', href: '/app/invoices?view=claim', tone: 'purple' },
+    { label: 'Broken promises', value: String(broken.length), href: '/app/invoices?view=broken', tone: broken.length ? 'red' : 'gray' },
     { label: 'In dispute', value: gbp(sum(disputed)), hint: `${disputed.length} invoice${disputed.length === 1 ? '' : 's'}`, href: '/app/invoices?view=disputed', tone: disputed.length ? 'orange' : 'gray' },
   ])}<div class="grid-2">${card({ title: `Do these now (${now.length})`, body: actionList(ctx, now.slice(0, 8)), footer: now.length > 8 ? html`<a href="/app/chase">See all ${now.length} on the chase list</a>` : null })}${card({ title: 'Coming up in the next 7 days', body: actionList(ctx, soon.slice(0, 8), { showDate: true }) })}</div><div class="grid-2">${card({
     title: 'Ageing of unpaid invoices',
@@ -135,7 +151,7 @@ export function chaseList(ctx) {
   }
   const later = open.filter((i) => i.next.on > addDays(t, 13));
   if (later.length) groups.push({ title: 'Later', list: later, showDate: true });
-  const emailsDue = open.filter((i) => i.next.now && i.next.template && i.next.template !== '5').length;
+  const emailsDue = dueEmails(ctx).length;
   const actions = can(ctx, 'member') && emailsDue ? [button(`Send the ${emailsDue} due reminder${emailsDue === 1 ? '' : 's'} one by one`, { href: '/app/chase/next', variant: 'primary', size: 'sm' })] : [];
   const body = html`${pageHeader({ title: 'Chase list', subtitle: 'Every unpaid invoice\'s next action, in date order. Work through it on Monday and chase broken promises on Friday.', actions })}${chaseTabs('list')}${groups.map((g) => html`<section class="agenda-day"><h2 class="agenda-date">${g.title} <span class="count">${g.list.length}</span></h2>${actionList(ctx, g.list, { showDate: g.showDate })}</section>`)}`;
   return appPage(ctx, { title: 'Chase list', active: 'chase', body: html`<div class="agenda">${body}</div>` });
@@ -144,7 +160,7 @@ export function chaseList(ctx) {
 /** "Work through the list": opens the next due email reminder; after each send it comes back here. */
 export function chaseNext(ctx) {
   requireRole(ctx, 'member');
-  const queue = allInvoices(ctx).filter((i) => live(i) && i.next.now && i.next.template && i.next.template !== '5').sort(byWhen);
+  const queue = dueEmails(ctx);
   if (!queue.length) return { redirect: '/app/chase', flash: 'All caught up: no email reminders are due right now.' };
   const [first] = queue;
   return { redirect: `/app/invoices/${first.id}/compose?t=${first.next.template}&queue=${queue.length}` };
@@ -181,15 +197,25 @@ export function calendarPage(ctx) {
 
 const icsText = (s) => String(s ?? '').replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
 const icsDate = (iso) => iso.replace(/-/g, '');
+/** RFC 5545 line folding: at most 75 octets a line (the space starting a continuation counts), never splitting a character. */
 function fold(line) {
-  const out = [];
-  let s = line;
-  while (s.length > 74) {
-    out.push(s.slice(0, 74));
-    s = ` ${s.slice(74)}`;
+  const parts = [];
+  let cur = '';
+  let octets = 0;
+  let limit = 75;
+  for (const ch of line) {
+    const size = Buffer.byteLength(ch);
+    if (octets + size > limit) {
+      parts.push(cur);
+      cur = '';
+      octets = 0;
+      limit = 74;
+    }
+    cur += ch;
+    octets += size;
   }
-  out.push(s);
-  return out.join('\r\n');
+  parts.push(cur);
+  return parts.join('\r\n ');
 }
 
 /** Public iCalendar feed of next actions, addressed by the workspace's secret feed token. */
@@ -211,7 +237,7 @@ export function icsFeed(ctx) {
       `DTSTART;VALUE=DATE:${icsDate(on)}`,
       `DTEND;VALUE=DATE:${icsDate(addDays(on, 1))}`,
       fold(`SUMMARY:${icsText(`${i.next.label}: ${i.number} (${i.customer__label || 'customer'})`)}`),
-      fold(`DESCRIPTION:${icsText(`Balance ${gbp(i.balance)}, ${i.days_overdue} days overdue.\n${config.BASE_URL}/app/invoices/${i.id}`)}`),
+      fold(`DESCRIPTION:${icsText(`Balance ${gbp(i.balance)}, ${daysLabel(i.days_overdue)} overdue.\n${config.BASE_URL}/app/invoices/${i.id}`)}`),
       fold(`URL:${config.BASE_URL}/app/invoices/${i.id}`),
       'TRANSP:TRANSPARENT',
       'END:VEVENT',
@@ -240,7 +266,7 @@ function loadInvoice(ctx) {
 
 function planFrom(ctx, inv, src) {
   const n = Math.max(1, Math.min(24, Number(src.n) || 3));
-  const first = /^\d{4}-\d{2}-\d{2}$/.test(String(src.first || '')) ? src.first : addDays(base(ctx).today, 7);
+  const first = isISODate(src.first) ? src.first : addDays(base(ctx).today, 7);
   return { n, first, list: instalments(inv.balance, n, first) };
 }
 
@@ -252,8 +278,16 @@ function merged(ctx, { inv, customer, log }, tpl, src = {}) {
 
 function warnings(ctx, { inv, customer }, tpl, text) {
   const out = [];
-  const gaps = unfilled(text);
-  if (gaps.length) out.push(alert(html`Still in brackets: ${gaps.map((g) => html`<code>[${g}]</code> `)}. Fill them in below, or add the details in <a href="/app/settings">Settings</a> or on the customer so they fill in next time.`, 'orange', 'Check before sending.'));
+  // A merge field that found no value needs details adding. Any other bracketed wording (Template 3's optional clause) is the writer's to keep or cut.
+  const known = new Set(MERGE_FIELDS.map((f) => f.toLowerCase()));
+  const brackets = unfilled(text);
+  const optional = brackets.filter((g) => !known.has(g.trim().toLowerCase()));
+  if (brackets.length) {
+    const advice = [];
+    if (optional.length < brackets.length) advice.push(html`Fill the missing details in below, or add them in <a href="/app/settings">Settings</a> or on the customer so they fill in next time.`);
+    if (optional.length) advice.push(html`${optional.map((g) => html`<code>[${g}]</code> `)}${optional.length === 1 ? 'is' : 'are'} optional wording: keep ${optional.length === 1 ? 'it' : 'them'} or delete ${optional.length === 1 ? 'it' : 'them'}, brackets included.`);
+    out.push(alert(html`Still in brackets: ${brackets.map((g) => html`<code>[${g}]</code> `)}. ${advice.map((a) => html`${a} `)}`, 'orange', 'Check before sending.'));
+  }
   if (tpl.review) out.push(alert('Have a solicitor check this template before you first use it. It is general wording, not legal advice.', 'yellow', 'Solicitor review.'));
   if (inv.status === 'Disputed') out.push(alert('This invoice is disputed. Don\'t chase the disputed amount as if it were simply late: ask for the undisputed part instead.', 'orange'));
   if (customer?.customer_type === CONSUMER && ['4', '5'].includes(tpl.code)) out.push(alert('This customer is a consumer. Statutory interest and fixed compensation don\'t apply to consumer sales.', 'red'));
@@ -268,7 +302,7 @@ function warnings(ctx, { inv, customer }, tpl, text) {
 function figuresCard(inv) {
   const f = inv.fig;
   const item = (label, value, tone = null) => html`<div class="figure"><span class="figure-label">${label}</span><span${attrs({ class: tone ? `figure-value text-${tone}` : 'figure-value' })}>${value}</span></div>`;
-  const rc = rateCheck(f.reference, { claim: inv.claim_interest, daysOverdue: f.daysOverdue });
+  const rc = rateCheck(f.reference, { claim: inv.claim_on ?? inv.claim_interest, daysOverdue: f.daysOverdue });
   return card({
     title: 'Figures',
     body: html`<div class="figures">${item('Amount', gbp(f.amount))}${item('Paid so far', gbp(f.paid))}${item('Balance', gbp(f.balance))}${item('Days overdue', String(f.daysOverdue), f.daysOverdue ? 'orange' : null)}${
@@ -327,7 +361,7 @@ export function composePage(ctx, { values = null, error = null } = {}) {
   const { db } = ctx.services;
   const head = pageHeader({
     title: `${tpl.name}: ${inv.number}`,
-    subtitle: `${customer?.name || ''} · balance ${gbp(inv.balance)}${inv.days_overdue ? ` · ${inv.days_overdue} days overdue` : ''}`,
+    subtitle: `${customer?.name || ''} · balance ${gbp(inv.balance)}${inv.days_overdue ? ` · ${daysLabel(inv.days_overdue)} overdue` : ''}`,
     crumbs: [{ label: 'Invoices', href: '/app/invoices' }, { label: inv.number, href: `/app/invoices/${inv.id}` }, { label: 'Write' }],
   });
   const tpls = db.all('SELECT code, name FROM r_templates WHERE org_id = ? ORDER BY code', ctx.org.id);
@@ -352,7 +386,7 @@ export function composePage(ctx, { values = null, error = null } = {}) {
     }<div class="field field-wide"><label for="c-subject">${isEmailTpl ? 'Subject' : 'Heading'}</label><input id="c-subject" name="subject" value="${subject}" required maxlength="300"></div><div class="field field-wide"><label for="c-body">Wording</label><textarea id="c-body" name="body" rows="20" required>${text}</textarea><p class="help">Edit anything before you send. Changes here don't alter the template.</p>${footerNote}</div></div><div class="form-actions">${
       isEmailTpl ? button(queue ? 'Send, log it and open the next' : 'Send email and log it', { variant: 'primary', name: 'send', value: '1' }) : ''
     }${button(isEmailTpl ? 'Print as a letter' : 'Open letter to print', { variant: isEmailTpl ? 'secondary' : 'primary', extra: { formaction: `/app/invoices/${inv.id}/letter` } })}${button('Copy wording', { type: 'button', extra: { 'data-copy-target': '#c-body' } })}${
-      queue ? button('Skip this one', { href: `/app/chase/skip/${inv.id}`, variant: 'ghost' }) : button('Cancel', { href: `/app/invoices/${inv.id}`, variant: 'ghost' })
+      queue ? button('Skip this one', { variant: 'ghost', extra: { formaction: `/app/chase/skip/${inv.id}`, formnovalidate: true } }) : button('Cancel', { href: `/app/invoices/${inv.id}`, variant: 'ghost' })
     }</div></form>`;
   const body = html`${head}${picker}${queueNote}${warnings(ctx, data, tpl, `${subject}\n${text}`)}<div class="detail-grid"><div class="detail-main">${planForm ? card({ title: 'Instalments', body: planForm }) : ''}${card({ body: form })}</div><aside class="detail-side">${figuresCard(inv)}${card({ title: 'Merge fields', body: html`<p class="small muted">Use these in your templates:</p><p class="merge-fields">${MERGE_FIELDS.map((f) => html`<code>[${f}]</code> `)}</p>` })}</aside></div>`;
   return appPage(ctx, { title: `${tpl.name}: ${inv.number}`, active: 'invoices', body });
@@ -367,6 +401,7 @@ export function emailFooter(ctx) {
 
 /** Skipping in "work through the list" mode pushes that invoice's action to tomorrow by logging a follow-up date. */
 export function chaseSkip(ctx) {
+  // A POST (with the compose form's CSRF token) because it writes to the chase log.
   requireRole(ctx, 'member');
   const { resources } = ctx.services;
   const inv = resources.find(ctx, resources.get('invoices'), ctx.params.id);
@@ -396,6 +431,10 @@ export async function composeSend(ctx) {
   const s = ctx.org.settings || {};
   const footer = emailFooter(ctx);
   const sent = await ctx.services.mailer.send({ orgId: ctx.org.id, to: v.to, cc: v.cc || null, replyTo: s.reply_to || ctx.user.email, subject: v.subject, text: footer ? `${v.body}\n\n--\n${footer}` : v.body, related: 'chase' });
+  if (sent.status === 'failed') {
+    // Nothing reached the customer, so don't log a "Sent" contact: it would push the follow-up out a week and hide the invoice from the chase list.
+    return { status: 422, html: composePage(ctx, { values: v, error: 'The email could not be sent, so nothing was logged in the chase log. Your wording is kept below: try again in a moment. The failed attempt and its reason are under Activity → Emails.' }) };
+  }
   const t = base(ctx).today;
   logContact(ctx, inv, {
     channel: 'Email', stage: tpl.stage || null, outcome: 'Sent', contact: v.to, template: code, outbox_id: sent.id ?? null,
@@ -405,7 +444,6 @@ export async function composeSend(ctx) {
   let flash = 'Email sent and logged in the chase log.';
   if (sent.demo) flash = 'Demo workspace: the email was logged but not sent.';
   else if (sent.status === 'logged') flash = 'Email saved and logged. Email sending isn\'t set up yet, so it\'s in Activity → Emails rather than sent.';
-  else if (sent.status === 'failed') return { redirect: `/app/invoices/${inv.id}`, flash: { text: 'The email could not be sent. It is logged; check Activity → Emails for the reason.', tone: 'red' } };
   return { redirect: back, flash };
 }
 
@@ -446,6 +484,11 @@ export function logLetter(ctx) {
   const t = base(ctx).today;
   const days = tpl.code === '5' ? (customer?.customer_type === 'Sole trader' ? 30 : 14) : 7;
   logContact(ctx, inv, { channel: 'Letter', stage: tpl.stage || (tpl.code === 'plan' ? 'Payment plan' : null), outcome: 'Sent', template: tpl.code, next_follow_up: addDays(t, days), contact: customer?.name || null });
+  // A sent payment-plan agreement puts the invoice on the plan, so the chase ladder stops escalating it.
+  if (tpl.code === 'plan' && live(inv) && inv.status !== 'On payment plan') {
+    ctx.services.resources.patch(ctx, ctx.services.resources.get('invoices'), inv.id, { status: 'On payment plan' });
+    return { redirect: `/app/invoices/${inv.id}`, flash: 'Letter logged, and the invoice is now on a payment plan.' };
+  }
   return { redirect: `/app/invoices/${inv.id}`, flash: 'Letter logged in the chase log.' };
 }
 
@@ -481,11 +524,18 @@ export function reports(ctx) {
   const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const monthName = (ym) => `${MON[Number(ym.slice(5, 7)) - 1]} ${ym.slice(0, 4)}`;
   const settled = all.filter((i) => i.fig.settled && i.fig.settledOn);
+  // Money received in each month: every payment on the day it arrived, plus invoices marked Paid with no payment records.
+  const received = new Map(months.map((ym) => [ym, 0]));
+  for (const i of all) {
+    const pays = b.payments.get(i.id) || [];
+    const entries = pays.length ? pays.map((p) => [p.date, p.amount]) : i.fig.settled && i.fig.settledOn ? [[i.fig.settledOn, i.amount]] : [];
+    for (const [date, amount] of entries) if (received.has(date.slice(0, 7))) received.set(date.slice(0, 7), received.get(date.slice(0, 7)) + amount);
+  }
   const perMonth = months.map((ym) => {
     const list = settled.filter((i) => i.fig.settledOn.slice(0, 7) === ym);
     const onTime = list.filter((i) => i.days_overdue === 0).length;
     const avgLate = list.length ? round2(list.reduce((s, i) => s + i.days_overdue, 0) / list.length) : null;
-    return { ym, n: list.length, onTime, pct: list.length ? Math.round((onTime / list.length) * 100) : null, avgLate, collected: round2(list.reduce((s, i) => s + i.amount, 0)) };
+    return { ym, n: list.length, onTime, pct: list.length ? Math.round((onTime / list.length) * 100) : null, avgLate, collected: round2(received.get(ym)) };
   });
   const open = all.filter(live);
   const overdue = open.filter((i) => i.days_overdue > 0);

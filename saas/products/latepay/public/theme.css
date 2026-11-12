@@ -1,43 +1,28 @@
-/* PaidOnTime theme: a calm green-teal brand on top of the shared core styles. */
+/* PaidOnTime theme: a deep ledger green on top of the shared core and marketing styles. */
 :root {
-  --brand: #0f6e5c;
-  --brand-dark: #0a5245;
-  --brand-soft: #e6f3f0;
+  --brand: #0f5f4a;
+  --brand-dark: #0b4b3a;
+  --brand-ink: #08392c;
+  --brand-soft: #e9f2ee;
+  --brand-line: #c6dccf;
+  --brand-tint: #f4f8f6;
   --brand-contrast: #ffffff;
+  --brand-ring: rgba(15, 95, 74, 0.2);
 }
 
-.logo { font-weight: 700; }
-
-/* Landing page */
-.hero-card .card-head h2 { font-size: 1rem; margin: 0; }
-.hero-card .action-item { gap: .75rem; }
-#stats .kpi-grid { margin: 1.5rem 0 1rem; }
-#compare table { table-layout: fixed; width: 100%; }
-#compare th, #compare td { white-space: normal; }
-#compare th[scope="row"] { font-weight: 600; text-align: left; text-transform: none; letter-spacing: normal; font-size: .95rem; color: var(--text); }
-#compare thead th:first-child { width: 30%; }
-#compare td:last-child { font-weight: 600; color: var(--brand-dark); }
-.free-template h2 { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
+/* Logo mark: colours follow the theme. */
+.logo-bg { fill: var(--brand); }
+.logo-fg { stroke: var(--brand-contrast); }
+.mock-logo { background: var(--brand) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='9.4' fill='none' stroke='white' stroke-width='2.1'/%3E%3Cpath d='m11.4 15.2 3.9 3.9 6.3-7.2' fill='none' stroke='white' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / 100% no-repeat; }
 
 /* App */
 .action-item .badge { white-space: normal; text-align: left; }
-.agenda-date { display: flex; align-items: center; gap: .5rem; font-size: 1.05rem; margin: 1.5rem 0 .5rem; }
-.agenda-day .action-list { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
-.board-col { min-width: 220px; }
-.board-card .badge { margin-top: .35rem; white-space: normal; }
-.compose textarea { font-family: var(--mono); font-size: .9rem; line-height: 1.5; }
-.merge-fields code { font-size: .75rem; }
-.onboarding { border-left: 4px solid var(--brand); }
-@media (max-width: 640px) { .onboard-step { flex-wrap: wrap; } .onboard-step .page-actions { width: 100%; padding-left: 3rem; } }
+.merge-fields code { font-size: 0.75rem; }
+.free-template h2 { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+@media (max-width: 640px) { .onboard-step { flex-wrap: wrap; } .onboard-step .page-actions { width: 100%; padding-left: 2.6rem; } }
 
-/* Founder console: the checklist rows carry their own tick button, so hide the core's generic tick. */
+/* Founder console: the checklist rows carry their own tick button, so hide the core's generic box. */
 .checklist .check-row { padding-left: 0; }
 .checklist .check-row::before { display: none; }
-.check-row .btn { font-size: 1.1rem; line-height: 1; padding: .2rem .5rem; }
+.check-row .btn { min-height: 26px; padding: 0 0.45rem; font-size: 0.9375rem; line-height: 1; }
 .check-row.done span { color: var(--muted); text-decoration: line-through; }
-
-/* Letters */
-.letter { font-size: 1rem; line-height: 1.55; }
-.letter table { width: 100%; }
-.letterhead { border-bottom: 2px solid var(--brand); padding-bottom: .75rem; margin-bottom: 1.25rem; }
-.letter-meta { display: flex; justify-content: space-between; gap: 2rem; flex-wrap: wrap; }

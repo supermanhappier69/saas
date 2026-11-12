@@ -144,7 +144,7 @@ test('working through the list sends reminders one by one and skips', async () =
   assert.equal(next.status, 303);
   assert.notEqual(Number(next.location.match(/invoices\/(\d+)/)[1]), id, 'the sent invoice is no longer due');
   const skipId = Number(next.location.match(/invoices\/(\d+)/)[1]);
-  const skip = await founder.get(`/app/chase/skip/${skipId}`);
+  const skip = await founder.post(`/app/chase/skip/${skipId}`);
   assert.equal(skip.location, '/app/chase/next');
   assert.equal(t.db.get('SELECT next_follow_up FROM r_chases WHERE org_id = ? AND invoice = ? ORDER BY id DESC LIMIT 1', org.id, skipId).next_follow_up, '2026-11-12');
   // Drain the queue: eventually it reports all caught up.
@@ -152,7 +152,7 @@ test('working through the list sends reminders one by one and skips', async () =
     const r = await founder.get('/app/chase/next');
     if (r.location === '/app/chase') break;
     const inv = Number(r.location.match(/invoices\/(\d+)/)[1]);
-    await founder.get(`/app/chase/skip/${inv}`);
+    await founder.post(`/app/chase/skip/${inv}`);
   }
   assert.equal((await founder.get('/app/chase/next')).location, '/app/chase');
 });

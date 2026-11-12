@@ -212,10 +212,9 @@ export function modelFor(q = {}) {
     const sales = trials * inp.paidRate / 100;
     const oneOff = sales * ((1 - inp.completeShare / 100) * inp.corePrice + (inp.completeShare / 100) * inp.completePrice);
     customers += sales;
-    if (m >= inp.autopilotFrom) {
-      subs = subs * (1 - inp.churn / 100) + sales * inp.autopilotRate / 100;
-      if (m === inp.autopilotFrom) subs += customers * inp.autopilotRate / 100;
-    }
+    // At launch the share who take the plan comes from everyone who has bought so far, this month's buyers included (counted once).
+    if (m === inp.autopilotFrom) subs = customers * inp.autopilotRate / 100;
+    else if (m > inp.autopilotFrom) subs = subs * (1 - inp.churn / 100) + sales * inp.autopilotRate / 100;
     retainers = Math.min(retainers + inp.retainers, 30);
     const recurring = subs * inp.autopilotPrice + retainers * inp.retainerPrice;
     const revenue = oneOff + recurring;

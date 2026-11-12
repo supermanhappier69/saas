@@ -46,7 +46,8 @@ export function filtersFrom(r, query) {
 }
 const viewFrom = (r, query) => {
   if ((r.views || []).some((v) => v.id === query.view)) return query.view;
-  return query.view === undefined && r.defaultView ? r.defaultView : '';
+  // A search from a list that opens on a default view (Unpaid invoices) looks across everything, or a paid invoice could never be found.
+  return query.view === undefined && r.defaultView && !String(query.q ?? '').trim() ? r.defaultView : '';
 };
 const fieldErrorsOf = (err) => (err instanceof HttpError && err.status === 422 && err.details?.fieldErrors ? err.details.fieldErrors : null);
 const back = (r, row) => `/app/${r.name}/${row.id}`;
@@ -82,14 +83,17 @@ export function listPage(ctx, r) {
   const actions = [
     ...(r.listActions ? r.listActions(ctx) : []),
     writable && r.import !== false ? button('Import', { href: `${base}/import`, size: 'sm' }) : null,
-    button('Export CSV', { href: urlWith(`${base}/export.csv`, state), size: 'sm' }),
+    button('Export CSV', { href: urlWith(`${base}/export.csv`, { ...state, view }), size: 'sm' }),
     writable && r.create !== false ? button(`New ${lower(r.singular)}`, { href: `${base}/new`, variant: 'primary', size: 'sm' }) : null,
   ].filter(Boolean);
   const fb = filterBar({
     action: base, q: q.q || '', hidden: { view: q.view, sort: q.sort, dir: q.dir },
     filters: filterFields(r).map((f) => ({ key: f.key, label: f.label, options: filterOptions(ctx, f) })), values: filters,
   });
-  const filtered = q.q || Object.keys(filters).length || view;
+  // A list's default view (Unpaid invoices) counts as narrowing only when something exists to be narrowed out: a workspace with
+  // no invoices at all should get the "No invoices yet" help with its Add and Import buttons, not "No matching records".
+  const anyRecords = result.rows.length > 0 || resources.query(ctx, r, { all: true }).rows.length > 0;
+  const filtered = anyRecords && (q.q || Object.keys(filters).length || view);
   const empty = filtered
     ? emptyState({ title: 'No matching records', text: 'Try a different search, filter or view.' })
     : emptyState({
@@ -117,7 +121,8 @@ function childLists(ctx, r, row) {
         title: `${f.relatedLabel || o.label} (${list.length})`,
         actions: add,
         body: table({ columns: fieldColumns(listColumns(o).filter((c) => c.key !== f.key)), rows: list.slice(0, 25), rowHref: (x) => `/app/${o.name}/${x.id}`, empty: html`<p class="muted">None yet.</p>` }),
-        footer: list.length > 25 ? html`<a href="${urlWith(`/app/${o.name}`, { [`f_${f.key}`]: row.id })}">See all ${list.length}</a>` : null,
+        // view=all: the list's default view (Unpaid invoices) would otherwise show fewer than the "See all N" promised.
+        footer: list.length > 25 ? html`<a href="${urlWith(`/app/${o.name}`, { [`f_${f.key}`]: row.id, view: o.defaultView ? 'all' : undefined })}">See all ${list.length}</a>` : null,
       }));
     }
   }
@@ -158,8 +163,19 @@ export function detailPage(ctx, r, id) {
   );
   const historyCard = history.length
     ? card({ title: 'History', body: timeline(history.map((h) => ({ when: fmtWhen(h.created_at, config?.TIMEZONE), who: h.who, body: h.summary }))) }) : '';
+  // Records that are deleted along with this one (a payment goes with its invoice), so the confirmation can say so.
+  const withIt = [];
+  for (const o of resources.all) {
+    for (const f of o.fields) {
+      if (f.type !== 'ref' || f.ref !== r.name || f.onDelete !== 'cascade') continue;
+      const n = db.get(`SELECT COUNT(*) AS n FROM "${o.table}" WHERE org_id = ? AND "${f.key}" = ?`, ctx.org.id, row.id).n;
+      const noun = lower(o.singular);
+      if (n) withIt.push(`${n} ${n === 1 ? noun : /[^aeiou]y$/.test(noun) ? `${noun.slice(0, -1)}ies` : `${noun}s`}`);
+    }
+  }
+  const also = withIt.length ? ` This also deletes ${withIt.join(' and ')}.` : '';
   const del = r.delete !== false && can(ctx, r.deleteRole || 'member')
-    ? html`<div class="danger-zone">${postButton(ctx, `${back(r, row)}/delete`, `Delete ${lower(r.singular)}`, { variant: 'danger', size: 'sm', confirm: `Delete “${row.__title}”? This can't be undone.` })}</div>` : '';
+    ? html`<div class="danger-zone">${postButton(ctx, `${back(r, row)}/delete`, `Delete ${lower(r.singular)}`, { variant: 'danger', size: 'sm', confirm: `Delete “${row.__title}”?${also} This can't be undone.` })}</div>` : '';
   const body = html`${pageHeader({
     title: html`${row.__title}${row.is_sample ? html` ${badge('SAMPLE', 'yellow')}` : ''}`,
     subtitle: r.detailSubtitle ? r.detailSubtitle(row, ctx) : null,
@@ -302,7 +318,8 @@ function importPost(ctx, r) {
 
 function exportCsv(ctx, r) {
   const q = ctx.query;
-  const text = ctx.services.csv.exportCSV(ctx, r, { q: q.q, filters: filtersFrom(r, q), view: viewFrom(r, q), sort: q.sort, dir: q.dir });
+  // No view in the link means everything: the list's default view (for example Unpaid invoices) must not silently trim a full export.
+  const text = ctx.services.csv.exportCSV(ctx, r, { q: q.q, filters: filtersFrom(r, q), view: q.view === undefined ? '' : viewFrom(r, q), sort: q.sort, dir: q.dir });
   ctx.audit?.('export', r.name, null, `Exported ${lower(r.label)} to CSV`);
   const day = todayISO(ctx.services.config?.TIMEZONE);
   return { download: { body: text.startsWith('\uFEFF') ? text : `\uFEFF${text}`, type: 'text/csv; charset=utf-8', filename: `${ctx.definition.slug}-${r.name}-${day}.csv` } };

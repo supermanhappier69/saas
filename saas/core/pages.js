@@ -27,23 +27,33 @@ const section = (id, title, body, cls = '') => html`<section${attrs({ id, class:
 export function pricingGrid(def) {
   const plans = (def.plans || []).filter((p) => !p.hidden);
   const cta = def.marketing?.cta || 'Start free trial';
-  const card = (p) => html`<div class="${p.featured ? 'plan plan-featured' : 'plan'}">${p.featured ? html`<p class="plan-flag">Most popular</p>` : ''}<h3>${p.name}</h3><p class="plan-price"><span class="amount">${priceText(p)}</span>${
+  const flag = def.marketing?.featuredLabel || 'Most popular';
+  const card = (p) => html`<div class="${p.featured ? 'plan plan-featured' : 'plan'}">${p.featured ? html`<p class="plan-flag">${flag}</p>` : ''}<h3>${p.name}</h3><p class="plan-price"><span class="amount">${priceText(p)}</span>${
     typeof p.price === 'number' && p.price ? html`<span class="per">${perText(p)}</span>` : ''
   }</p>${p.description ? html`<p class="muted">${p.description}</p>` : ''}${
     p.features?.length ? html`<ul class="ticks">${p.features.map((f) => html`<li>${f}</li>`)}</ul>` : ''
   }<div class="plan-action">${button(cta, { href: '/signup', variant: p.featured ? 'primary' : 'secondary' })}</div></div>`;
-  return html`<div class="plans">${plans.map(card)}</div><p class="muted small center">${def.billingNote || 'Prices exclude VAT. Cancel any time.'} Every plan starts with a ${trialDays(def)}-day free trial.</p>`;
+  return html`<div class="plans">${plans.map(card)}</div><p class="plans-note">${def.billingNote || 'Prices exclude VAT. Cancel any time.'} Every plan starts with a ${trialDays(def)}-day free trial.</p>`;
+}
+
+/** The FAQ entries as an accordion list, for landing and pricing pages. */
+export function faqList(def) {
+  const faq = def.marketing?.faq || [];
+  if (!faq.length) return '';
+  return html`<div class="faq-list">${faq.map((f) => html`<details class="faq"><summary>${f.q}</summary><div class="faq-a prose">${md(f.a)}</div></details>`)}</div>`;
 }
 
 function faqSection(def) {
-  const faq = def.marketing?.faq || [];
-  if (!faq.length) return '';
-  return section('faq', 'Questions', html`<div class="faq-list">${faq.map((f) => html`<details class="faq"><summary>${f.q}</summary><div class="faq-a prose">${md(f.a)}</div></details>`)}</div>`);
+  const list = faqList(def);
+  if (!list) return '';
+  return html`<section class="section section-faq" id="faq"><div class="container faq-split"><div><h2>Questions</h2><p class="muted">Something else? <a href="/contact">Send us a question</a>.</p></div>${list}</div></section>`;
 }
 
 function landingPage(ctx) {
   const def = ctx.definition;
   const m = def.marketing || {};
+  // Products can supply a bespoke landing body; the generic sections below are the fallback.
+  if (typeof m.landing === 'function') return publicPage(def, ctx, { description: m.metaDescription || def.description, body: m.landing(ctx) });
   const cta = m.cta || 'Start free trial';
   const actions = html`<div class="hero-actions">${button(cta, { href: '/signup', variant: 'primary' })}${button('Try the demo', { href: '/demo' })}</div>`;
   const visual = m.heroImage
@@ -192,7 +202,7 @@ function signupPage(ctx, { values = {}, errors = {}, status = 200 } = {}) {
     submit: def.marketing?.cta || 'Start free trial',
     extra: html`<p class="small muted">By creating an account you agree to the <a href="/terms">Terms</a> and <a href="/privacy">Privacy Policy</a>.</p>`,
   });
-  return withStatus(authPage(def, ctx, { title: 'Start your free trial', intro: `${trialDays(def)} days free. No card needed. Cancel any time.`, body, footer: html`Already have an account? <a href="/login">Log in</a>` }), status);
+  return withStatus(authPage(def, ctx, { title: 'Start your free trial', intro: `${trialDays(def)} days free. No card needed. ${oneOffOnly(def) ? 'One price after that, no subscription.' : 'Cancel any time.'}`, body, footer: html`Already have an account? <a href="/login">Log in</a>` }), status);
 }
 
 function welcomeText(def, user, config) {
@@ -291,7 +301,7 @@ export function registerPages(router) {
   router.get('/pricing', (ctx) => {
     const def = ctx.definition;
     const intro = def.marketing?.pricingIntro || (oneOffOnly(def) ? 'One payment, no subscription. Start with a free trial and choose a plan when you are ready.' : 'Simple monthly plans. Start with a free trial and choose a plan when you are ready.');
-    return publicPage(def, ctx, { title: 'Pricing', body: html`<section class="section"><div class="container"><h1>Pricing</h1><p class="lead">${intro}</p>${pricingGrid(def)}</div></section>${faqSection(def)}` });
+    return publicPage(def, ctx, { title: 'Pricing', body: html`<section class="page-hero"><div class="container"><p class="eyebrow">Pricing</p><h1>${def.marketing?.pricingHeadline || 'Plans and pricing'}</h1><p class="lead">${intro}</p></div></section><section class="section section-plans"><div class="container">${pricingGrid(def)}</div></section>${faqSection(def)}` });
   });
   router.get('/terms', (ctx) => legalPage(ctx, 'terms'));
   router.get('/privacy', (ctx) => legalPage(ctx, 'privacy'));
@@ -306,6 +316,8 @@ export function registerPages(router) {
 
   router.get('/signup', (ctx) => (ctx.user ? { redirect: '/app' } : signupPage(ctx)));
   router.post('/signup', async (ctx) => {
+    // Signing up while signed in used to create a second account and silently switch the session to it.
+    if (ctx.user) return { redirect: '/app' };
     limit(ctx, 'signup', 10, HOUR);
     const { auth, mailer, config } = ctx.services;
     const def = ctx.definition;
@@ -338,6 +350,8 @@ export function registerPages(router) {
     limit(ctx, 'login', 30, QUARTER);
     limit(ctx, 'login-email', 10, QUARTER, email);
     const user = auth.login(email, String(ctx.body.password || ''));
+    // Only failed attempts should count towards the per-account lockout.
+    if (user) ctx.services.limiter?.clear?.(`login-email:${email}`);
     if (!user) return loginPage(ctx, { values: { email, next: ctx.body.next }, errors: { _form: "That email and password don't match an account." }, status: 401 });
     let orgId = auth.defaultOrgFor(user.id);
     if (!orgId) {
@@ -426,7 +440,7 @@ export function registerPages(router) {
     return publicPage(def, ctx, {
       title: 'Demo',
       narrow: true,
-      body: html`<h1>Try ${def.name} with sample data</h1><p class="lead">${intro}</p><ul class="ticks"><li>No sign-up or card needed</li><li>Emails are never actually sent from the demo</li><li>The demo workspace is deleted automatically after ${def.demoDays ?? 2} days</li></ul><form method="post" action="/demo">${csrfField(ctx)}${button('Open the demo', { variant: 'primary' })}</form>`,
+      body: html`<div class="demo-page"><p class="eyebrow">Live demo</p><h1>Try ${def.name} with sample data</h1><p class="lead">${intro}</p><ul class="ticks"><li>No sign-up or card needed</li><li>Emails are never actually sent from the demo</li><li>The demo workspace is deleted automatically after ${def.demoDays ?? 2} days</li></ul><form method="post" action="/demo">${csrfField(ctx)}${button('Open the demo', { variant: 'primary', size: 'lg' })}</form></div>`,
     });
   });
   router.post('/demo', (ctx) => {
@@ -436,7 +450,8 @@ export function registerPages(router) {
     const id = randomToken(9).toLowerCase().replace(/[^a-z0-9]/g, '') || String(Date.now());
     const { user, org } = auth.signup({ name: 'Demo visitor', email: `demo-${id}@demo.invalid`, password: randomToken(18), orgName: def.demoOrgName || `${def.name} demo` }, { isDemo: true });
     auth.startSession(ctx.req, ctx.res, user.id, org.id);
-    return { redirect: '/app', flash: 'Welcome to the demo. Everything here is fictional sample data.' };
+    // The app shell already shows a demo banner, so no welcome flash is needed here.
+    return { redirect: '/app' };
   });
 
   router.get('/contact', (ctx) => contactPage(ctx, { values: ctx.user ? { name: ctx.user.name, email: ctx.user.email, company: ctx.org?.name } : {} }));

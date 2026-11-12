@@ -20,7 +20,9 @@ Understand the Research & Commercial Intelligence system, write a simple top-20 
 - Demo workspaces never send email: the mailer logs them with provider "demo".
 - **PaidOnTime (`saas/products/latepay`), the UK Late Payment & Credit Control Kit as a working app.** It has a chase calendar (list, board, iCalendar feed, Monday email, work-through mode), templates 0–5 with a phone script and a payment plan agreement, and send-and-log. It works out statutory interest with the Bank of England reference rate built in, handles part payments and the fixed sum, and has credit checks and account stops. It also has customer statements, a credit policy builder, guides, a monthly review, an onboarding checklist, a free public calculator, free template pages, a waitlist and a founder console with live numbers, the business plan, the marketing plan, a launch checklist and a path-to-£1m model. See `saas/products/latepay/README.md`.
 - Launch setup: Dockerfile, `fly.toml`, `.env.example`, GitHub Actions tests, and `docs/LAUNCH.md` (under £10 a month).
-- Tests: 50 passing (`cd saas && npm test`).
+- Tests: 100 passing (`cd saas && npm test`).
+- v2 design and quality pass (12 Nov 2026): new design system (self-hosted Inter and Source Serif 4 under the SIL Open Font License, see `saas/core/public/fonts/`), a rebuilt landing page whose product views and worked interest example are drawn from the app's own calculator, an icon sidebar, workspace search and a "New invoice" shortcut, plus about 30 functional fixes with regression tests (`test/regressions.test.js`, `products/latepay/test/regressions.test.js`, `products/latepay/test/experience.test.js`).
+- Open decisions from that pass: founder-console access relies on an unverified email (register the `FOUNDER_EMAILS` account before launch), each extra workspace gets a fresh trial, and Core → Complete upgrades are charged the full £99.
 
 ## Next
 1. PaidOnTime launch gates (founder): waitlist test or 5–10 buyer conversations, solicitor review of Templates 3–5 and the policy, refund policy, Stripe one-time prices.

@@ -8,8 +8,12 @@ export const ROLE_LABELS = { viewer: 'Viewer (read only)', member: 'Member', adm
 
 export function clientIp(req, config) {
   if (config?.TRUST_PROXY) {
-    const xf = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
-    if (xf) return xf;
+    // Earlier X-Forwarded-For entries are whatever the client sent, so using the first would let anyone dodge the login and
+    // sign-up limits by changing it. Fly's own header, or the last entry (the address our proxy saw), can't be set by the client.
+    const fly = String(req.headers['fly-client-ip'] || '').trim();
+    if (fly) return fly;
+    const hops = String(req.headers['x-forwarded-for'] || '').split(',').map((s) => s.trim()).filter(Boolean);
+    if (hops.length) return hops[hops.length - 1];
   }
   return req.socket?.remoteAddress || '';
 }
@@ -137,6 +141,7 @@ export function createAuth({ db, config, definition }) {
   function findToken(kind, token) {
     const t = db.get('SELECT * FROM tokens WHERE kind = ? AND token_hash = ?', kind, sha256(String(token || '')));
     if (!t || t.used_at || t.expires_at < nowISO()) return null;
+    if (kind === 'invite' && !db.get('SELECT id FROM orgs WHERE id = ?', t.org_id)) return null;
     return t;
   }
   const useToken = (id) => db.run('UPDATE tokens SET used_at = ? WHERE id = ?', nowISO(), id);

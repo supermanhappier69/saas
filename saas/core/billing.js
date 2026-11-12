@@ -34,7 +34,7 @@ export function createBilling({ db, config, definition }) {
     if (org.plan_status === 'past_due') return { ok: true, readOnly: false, label: 'Payment overdue', tone: 'orange', warning: 'Your last payment failed. Update your card in Billing to keep access.' };
     if (org.plan_status === 'trialing' && org.trial_ends && org.trial_ends >= today) {
       const left = daysBetween(today, org.trial_ends);
-      return { ok: true, readOnly: false, trial: true, daysLeft: left, label: `Trial: ${left} day${left === 1 ? '' : 's'} left`, tone: left <= 3 ? 'orange' : 'blue' };
+      return { ok: true, readOnly: false, trial: true, daysLeft: left, label: left === 0 ? 'Trial ends today' : `Trial: ${left} day${left === 1 ? '' : 's'} left`, tone: left <= 3 ? 'orange' : 'blue' };
     }
     return {
       ok: false, readOnly: true, tone: 'red',
@@ -160,7 +160,8 @@ export function createBilling({ db, config, definition }) {
 
   /** Development and demo only: switch plan without a payment. Requires ALLOW_FAKE_BILLING=1. */
   function simulate(org, planId) {
-    if (!config.ALLOW_FAKE_BILLING) throw new HttpError(403, 'Test billing is turned off.');
+    // With Stripe live in production this would hand out paid plans for free if the flag were left on by mistake.
+    if (!config.ALLOW_FAKE_BILLING || (enabled && config.NODE_ENV === 'production')) throw new HttpError(403, 'Test billing is turned off.');
     if (!planById(planId)) throw new HttpError(400, 'Unknown plan');
     db.run("UPDATE orgs SET plan = ?, plan_status = 'active' WHERE id = ?", planId, org.id);
   }
