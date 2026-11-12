@@ -190,15 +190,22 @@ export function createAuth({ db, config, definition }) {
       db.run('UPDATE users SET password_hash = ? WHERE id = ?', hashPassword(password), t.user_id);
       db.run('DELETE FROM sessions WHERE user_id = ?', t.user_id);
       useToken(t.id);
+      endResetLinks(t.user_id);
     });
     return getUser(t.user_id);
   }
+
+  /** Reset links already emailed (an older message, or one in an inbox someone else can read) stop working once the password changes. */
+  const endResetLinks = (userId) => db.run("UPDATE tokens SET used_at = ? WHERE kind = 'reset' AND user_id = ? AND used_at IS NULL", nowISO(), userId);
 
   function changePassword(userId, current, next) {
     const u = db.get('SELECT * FROM users WHERE id = ?', userId);
     if (!u || !verifyPassword(String(current || ''), u.password_hash)) fieldError('current', 'Your current password is not correct.', 401);
     checkPassword(next, 'password');
-    db.run('UPDATE users SET password_hash = ? WHERE id = ?', hashPassword(next), userId);
+    db.tx(() => {
+      db.run('UPDATE users SET password_hash = ? WHERE id = ?', hashPassword(next), userId);
+      endResetLinks(userId);
+    });
   }
 
   function createApiKey(orgId, userId, name) {
