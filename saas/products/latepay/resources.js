@@ -3,7 +3,7 @@
 import { HttpError, addDays, round2, todayISO, fmtGBP } from '../../core/util.js';
 import { html, badge } from '../../core/ui.js';
 import { invoiceFigures, rateCheck, fmtShort } from './lib/calc.js';
-import { nextAction, ladderFrom, LOG_STAGE_OPTIONS, STAGE_OPTIONS, stageForDays, stageLabel, whenLabel } from './lib/ladder.js';
+import { nextAction, ladderFrom, LOG_STAGE_OPTIONS, STAGE_OPTIONS, SKIPPED, isContact, stageForDays, stageLabel, whenLabel } from './lib/ladder.js';
 import { DEFAULT_TEMPLATES, defaultTemplate } from './lib/templates.js';
 
 export const CUSTOMER_TYPES = ['Limited company / LLP', 'Sole trader', 'Partnership', 'Public sector body', 'Charity or other organisation', 'Consumer (not a business)'];
@@ -11,7 +11,7 @@ export const CONSUMER = 'Consumer (not a business)';
 export const INVOICE_STATUSES = ['Open', 'Disputed', 'On payment plan', 'Paid', 'Written off'];
 const STATUS_TONES = { Open: 'blue', Disputed: 'orange', 'On payment plan': 'purple', Paid: 'green', 'Written off': 'gray' };
 const CHANNELS = ['Email', 'Phone', 'Letter', 'In person', 'Text message', 'Other'];
-const OUTCOMES = ['Sent', 'No response', 'Promise to pay', 'Paid', 'Dispute raised', 'Payment plan agreed', 'Wrong contact', 'Other'];
+const OUTCOMES = ['Sent', 'No response', 'Promise to pay', 'Paid', 'Dispute raised', 'Payment plan agreed', 'Wrong contact', 'Other', SKIPPED];
 const today = (ctx) => todayISO(ctx.services.config?.TIMEZONE);
 const isSettled = (row) => row.balance <= 0 || row.status === 'Paid';
 const isLive = (row) => !isSettled(row) && row.status !== 'Written off';
@@ -65,6 +65,7 @@ function computeInvoice(row, ctx) {
     paidDate: row.paid_date, claim, rateOverride: row.rate_override, workspaceRates: b.rates,
   });
   const log = b.chases.get(row.id) || [];
+  const contacts = log.filter(isContact);
   const next = nextAction({ ...row, customer_type: customer?.customer_type }, fig, log, { today: b.today, L: b.L });
   const rec = fig.settled ? null : stageForDays(fig.daysOverdue, fig.daysToDue, b.L);
   return {
@@ -75,6 +76,7 @@ function computeInvoice(row, ctx) {
     days_overdue: fig.daysOverdue,
     paid_total: fig.paid,
     balance: fig.balance,
+    credit: fig.credit,
     interest: fig.interest,
     daily_interest: fig.dailyInterest,
     fixed_sum: fig.fixedSum,
@@ -84,7 +86,7 @@ function computeInvoice(row, ctx) {
     stage_now: rec === null ? 'Not due yet' : stageLabel(rec),
     next_action: next.label,
     next_on: next.on,
-    last_contact: log.length ? log[log.length - 1].date : null,
+    last_contact: contacts.length ? contacts[contacts.length - 1].date : null,
   };
 }
 
@@ -118,6 +120,7 @@ function creditCheck(c, invoices, stopDays) {
   return {
     outstanding, overdue, overdue_count: overdueList.length, oldest_overdue: oldest || null, avg_days_late: avgLate, credit_check: check, credit_tone: tone,
     claimable: round2(live.reduce((s, i) => s + i.fig.claimable, 0)),
+    credit: round2(invoices.reduce((s, i) => s + i.fig.credit, 0)),
     stop_suggested: tone === 'red' && c.account_status !== 'On stop',
   };
 }
@@ -155,6 +158,7 @@ export function buildResources() {
       { key: 'oldest_overdue', label: 'Oldest overdue (days)', type: 'int' },
       { key: 'avg_days_late', label: 'Average days late (paid invoices)', type: 'number', dp: 1 },
       money('claimable', 'Interest and compensation claimable'),
+      money('credit', 'Credit held (overpayments)'),
       { key: 'credit_check', label: 'Credit check', type: 'text', render: (row) => badge(row.credit_check, row.credit_tone) },
     ],
     views: [
@@ -162,6 +166,13 @@ export function buildResources() {
       { id: 'watch', label: 'Over limit or long overdue', filter: (row) => row.credit_tone === 'red' },
       { id: 'stop', label: 'On stop', filter: (row) => row.account_status === 'On stop' },
     ],
+    // Two customers with the same name make a CSV import (which finds a customer by name) ambiguous, so a name can only be used once.
+    check(values, ctx, existing) {
+      const key = (s) => String(s ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
+      if (!values.name || (existing && key(existing.name) === key(values.name))) return {};
+      const clash = ctx.services.db.all('SELECT id, name FROM r_customers WHERE org_id = ? AND id != ?', ctx.org.id, existing?.id ?? 0).find((c) => key(c.name) === key(values.name));
+      return clash ? { name: `You already have a customer called “${clash.name}”. Open that one, or give this customer a different name (for example add the town).` } : {};
+    },
     prepare(list, ctx) {
       const byCustomer = new Map();
       for (const i of allInvoices(ctx)) {
@@ -175,7 +186,7 @@ export function buildResources() {
     },
     rowClass: (row) => (row.credit_tone === 'red' ? 'row-danger' : null),
     actions: [
-      { id: 'statement', label: 'Statement', href: (row) => `/app/customers/${row.id}/statement`, show: (row) => row.outstanding > 0 || row.claimable > 0 },
+      { id: 'statement', label: 'Statement', href: (row) => `/app/customers/${row.id}/statement`, show: (row) => row.outstanding > 0 || row.claimable > 0 || row.credit > 0 },
       {
         id: 'stop', label: 'Put on stop', confirm: 'Put this account on stop? Remember to tell the customer in writing.', show: (row) => row.account_status !== 'On stop',
         run: (ctx, row) => {
@@ -222,6 +233,7 @@ export function buildResources() {
       { key: 'days_overdue', label: 'Days overdue', type: 'int' },
       money('paid_total', 'Paid so far'),
       money('balance', 'Balance'),
+      money('credit', 'Overpaid (credit)'),
       { key: 'ref_rate', label: 'Reference rate', type: 'percent' },
       money('interest', 'Statutory interest to date'),
       money('daily_interest', 'Daily interest'),
@@ -316,6 +328,7 @@ export function buildResources() {
       { key: 'invoice', label: 'Invoice', type: 'ref', ref: 'invoices', required: true, onDelete: 'cascade', filter: true, relatedLabel: 'Payments', example: 'INV-1042' },
       { key: 'date', label: 'Date received', type: 'date', required: true, default: (ctx) => today(ctx), example: '15/10/2026' },
       { key: 'amount', label: 'Amount', type: 'money', required: true, min: 0.01, example: '1200.00' },
+      { key: 'overpayment', label: 'Record as overpayment', type: 'bool', help: 'Tick this only if the customer paid more than is owed on the invoice, for example by paying twice. The extra is kept as a credit on the invoice and on their statement, to refund or set against their next invoice.' },
       { key: 'method', label: 'Method', type: 'select', options: ['Bank transfer', 'Card', 'Direct debit', 'Cheque', 'Cash', 'Other'], default: 'Bank transfer' },
       { key: 'reference', label: 'Reference', type: 'text', max: 100, search: true },
       { key: 'notes', label: 'Notes', type: 'textarea', rows: 2, max: 2000 },
@@ -328,7 +341,11 @@ export function buildResources() {
       if (!inv || !values.amount) return errors;
       const others = ctx.services.db.get('SELECT COALESCE(SUM(amount), 0) AS s FROM r_payments WHERE org_id = ? AND invoice = ? AND id != ?', ctx.org.id, values.invoice, existing?.id ?? 0).s;
       const left = round2(inv.amount - others);
-      if (values.amount > left + 0.004) errors.amount = left > 0 ? `Only ${fmtGBP(left)} is still owed on this invoice.` : 'This invoice is already fully paid.';
+      if (values.amount > left + 0.004 && !values.overpayment) {
+        errors.amount = left > 0
+          ? `Only ${fmtGBP(left)} is still owed on this invoice. If the customer paid more, turn on “Record as overpayment”.`
+          : 'This invoice is already fully paid. If the customer paid it again, turn on “Record as overpayment”.';
+      }
       return errors;
     },
     afterSave(row, { ctx, before }) {
@@ -349,13 +366,13 @@ export function buildResources() {
     titleField: 'date',
     defaultSort: { key: 'date', dir: 'desc' },
     columns: ['date', 'invoice', 'channel', 'stage', 'outcome', 'next_follow_up'],
-    rowLabel: (row) => `${row.invoice__label || 'Invoice'} · ${String(row.stage || row.channel || 'contact').replace(/^\d · /, '').toLowerCase()}`,
+    rowLabel: (row) => `${row.invoice__label || 'Invoice'} · ${row.outcome === SKIPPED ? 'skipped' : String(row.stage || row.channel || 'contact').replace(/^\d · /, '').toLowerCase()}`,
     fields: [
       { key: 'invoice', label: 'Invoice', type: 'ref', ref: 'invoices', required: true, onDelete: 'cascade', filter: true, relatedLabel: 'Chase log', example: 'INV-1042' },
       { key: 'date', label: 'Date', type: 'date', required: true, default: (ctx) => today(ctx) },
       { key: 'channel', label: 'Channel', type: 'select', options: CHANNELS, default: 'Phone', required: true, filter: true },
       { key: 'stage', label: 'Stage', type: 'select', options: LOG_STAGE_OPTIONS, filter: true, tones: Object.fromEntries(LOG_STAGE_OPTIONS.map((s, i) => [s, ['blue', 'blue', 'orange', 'orange', 'red', 'red', 'red', 'orange', 'purple', 'gray'][i]])) },
-      { key: 'outcome', label: 'Outcome', type: 'select', options: OUTCOMES, filter: true, help: 'Promise to pay, Dispute raised and Payment plan agreed update the invoice for you.' },
+      { key: 'outcome', label: 'Outcome', type: 'select', options: OUTCOMES, filter: true, help: 'Promise to pay, Dispute raised and Payment plan agreed update the invoice for you. Skipped only pushes the next action back: it is not counted as a contact.' },
       { key: 'contact', label: 'Spoke to or sent to', type: 'text', max: 160 },
       { key: 'promised_date', label: 'Promised payment date', type: 'date' },
       { key: 'next_follow_up', label: 'Next follow-up', type: 'date' },
@@ -394,6 +411,11 @@ export function buildResources() {
     check(values, ctx, existing) {
       const clash = values.code && ctx.services.db.get('SELECT id FROM r_templates WHERE org_id = ? AND lower(code) = lower(?) AND id != ?', ctx.org.id, values.code, existing?.id ?? 0);
       return clash ? { code: 'Another template already uses this number.' } : {};
+    },
+    // Which templates need the Complete plan follows from the template's number, whatever the form, the API or a request says.
+    beforeSave(values, { existing }) {
+      values.complete_only = Boolean(defaultTemplate(values.code ?? existing?.code)?.complete_only);
+      return values;
     },
     fields: [
       { key: 'code', label: 'Number', type: 'text', required: true, max: 20, help: 'Templates 0 to 5 match the chase stages.' },
@@ -453,8 +475,11 @@ export function syncInvoice(ctx, invoiceId, { removed = null } = {}) {
   const pays = db.all('SELECT date, amount FROM r_payments WHERE org_id = ? AND invoice = ? ORDER BY date, id', ctx.org.id, inv.id);
   const total = round2(pays.reduce((s, p) => s + p.amount, 0));
   if (pays.length && total >= round2(inv.amount)) {
-    if (inv.status !== 'Paid' || inv.paid_date !== pays[pays.length - 1].date) {
-      resources.patch(ctx, r, inv.id, { status: 'Paid', paid_date: pays[pays.length - 1].date });
+    // The invoice was settled by the payment that took the total to its amount; anything received after that is an overpayment.
+    let run = 0;
+    const settledOn = (pays.find((p) => (run = round2(run + p.amount)) >= round2(inv.amount)) || pays[pays.length - 1]).date;
+    if (inv.status !== 'Paid' || inv.paid_date !== settledOn) {
+      resources.patch(ctx, r, inv.id, { status: 'Paid', paid_date: settledOn });
       ctx.audit?.('update', 'invoices', inv.id, `Invoice “${inv.number}” paid in full`);
     }
   } else if (inv.status === 'Paid' && (pays.length || (removed && removed.date === inv.paid_date))) {

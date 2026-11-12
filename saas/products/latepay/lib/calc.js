@@ -39,9 +39,12 @@ export function invoiceFigures({
   const total = round2(amount);
   let list = payments.filter((p) => p.date && Number(p.amount) > 0).map((p) => ({ date: p.date, amount: Number(p.amount) })).sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
   if (!list.length && status === 'Paid' && paidDate) list = [{ date: paidDate, amount: total }];
-  // A manual "Paid" status wins over incomplete payment records.
-  const paid = status === 'Paid' ? total : round2(list.reduce((s, p) => s + p.amount, 0));
+  const received = round2(list.reduce((s, p) => s + p.amount, 0));
+  // A manual "Paid" status wins over incomplete payment records, but never hides money that really arrived.
+  const paid = status === 'Paid' ? Math.max(total, received) : received;
   const balance = Math.max(0, round2(total - paid));
+  // Money received above the invoice amount (a double payment, say): owed back to the customer or set against their next invoice.
+  const credit = Math.max(0, round2(received - total));
   const settled = balance <= 0 || status === 'Paid';
   let settledOn = null;
   if (settled) {
@@ -86,6 +89,7 @@ export function invoiceFigures({
     amount: total,
     paid,
     balance,
+    credit,
     settled,
     settledOn,
     daysOverdue,

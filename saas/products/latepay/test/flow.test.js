@@ -114,7 +114,8 @@ test('composing fills in the figures and sending logs the email and the contact'
   const page = await owner.get(`/app/invoices/${id}/compose?t=3`);
   assert.equal(page.status, 200);
   assert.match(page.text, /Final notice: invoice INV-1002, £850\.00/);
-  assert.match(page.text, /Still in brackets/); // bank details aren't set yet
+  assert.match(page.text, /Check before sending/); // Template 3's optional "[and to pause further work…]" clause
+  assert.match(page.text, /optional wording/);
   const lba = text(await owner.get(`/app/invoices/${idOf('INV-1004')}/compose?t=5`));
   assert.match(lba, /Pre-Action Protocol/);
   assert.match(lba, /11 December 2026/); // sole trader: 30 days to reply
@@ -250,7 +251,7 @@ test('Core plan features are limited and Complete unlocks them', async () => {
   assert.match(text(await owner.get('/app/policy')), /part of the Complete plan/);
   assert.match(text(await owner.get(`/app/invoices/${idOf('INV-1002')}/compose?t=1`)), /Send email and log it/);
   const billing = text(await owner.get('/app/billing'));
-  assert.match(billing, /Activate Complete/);
+  assert.match(billing, /Upgrade for £50 \(test mode\)/); // Core already paid £49: Complete costs the £50 difference, not £99 again
   await owner.post('/app/billing/simulate', { plan: 'complete' });
   assert.match(text(await owner.get('/app/billing')), /Included/);
   assert.match(text(await owner.get('/app/reports')), /Share of invoices paid on time/);
